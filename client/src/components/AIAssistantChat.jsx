@@ -1,4 +1,5 @@
 import { useState } from "react";
+import PreferencesForm from "./PreferencesForm";
 
 // Change this if your backend runs on a different port
 const API = "http://localhost:5237";
@@ -58,8 +59,12 @@ export default function AIAssistantChat() {
     }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex justify-center p-4">
-      <div className="w-full max-w-xl flex flex-col bg-white rounded-2xl shadow">
+    <div className="min-h-screen bg-slate-100 flex flex-col items-center p-4">
+      {/* Preferences Form */}
+      <PreferencesForm />
+
+      {/* Chat Card */}
+      <div className="w-full max-w-xl flex flex-col bg-white rounded-2xl shadow mt-4">
         <h1 className="bg-[#203966] text-white font-bold text-lg rounded-t-2xl px-4 py-3">
           Recipe AI Assistant
         </h1>
@@ -69,13 +74,16 @@ export default function AIAssistantChat() {
             <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
               <span
                 className={`inline-block px-3 py-2 rounded-2xl max-w-[80%] whitespace-pre-wrap ${
-                  m.role === "user" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-800"
+                  m.role === "user"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-800"
                 }`}
               >
                 {m.text}
               </span>
             </div>
           ))}
+
           {loading && (
             <div className="text-left">
               <span className="inline-block px-3 py-2 rounded-2xl bg-slate-100 text-slate-500 italic">
@@ -84,20 +92,34 @@ export default function AIAssistantChat() {
             </div>
           )}
         </div>
-        
+
         <div className="flex gap-2 px-3 pt-2">
-            <button
-                onClick={() => callQuickAction("/api/ai/suggest-meal", "Suggest a meal for me")}
-                className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full"
-            >
-                🍽️ Suggest a meal
-            </button>
-            <button
-                onClick={() => callQuickAction("/api/ai/summarize-recipes", "Summarize my recipes")}
-                className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full"
-            >
-                📋 Summarize my recipes
-            </button>
+          <button
+            onClick={() =>
+              callQuickAction("/api/ai/suggest-meal", "Suggest a meal for me")
+            }
+            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full"
+          >
+            🍽️ Suggest a meal
+          </button>
+
+          <button
+            onClick={() =>
+              callQuickAction("/api/ai/summarize-recipes", "Summarize my recipes")
+            }
+            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full"
+          >
+            📋 Summarize my recipes
+          </button>
+
+          <button
+            onClick={() =>
+              callQuickAction("/api/ai/weekly-plan", "Generate my weekly meal plan")
+            }
+            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full"
+          >
+            📅 Generate weekly plan
+          </button>
         </div>
 
         <div className="flex gap-2 p-3 border-t">
@@ -109,6 +131,7 @@ export default function AIAssistantChat() {
             onKeyDown={(e) => e.key === "Enter" && send()}
             disabled={loading}
           />
+
           <button
             onClick={send}
             disabled={loading}
@@ -119,6 +142,6 @@ export default function AIAssistantChat() {
         </div>
       </div>
     </div>
-  );
+  );  
 }
 

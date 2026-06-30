@@ -39,4 +39,18 @@ public class RecipeDataPlugin
         return string.Join("\n", plan.Select(p =>
             $"{p.Day} - {p.MealSlot}: {p.RecipeTitle}"));
     }
+
+    [KernelFunction("get_user_preferences")]
+    [Description("Gets the user's dietary goal, diet type, and allergies")]
+    public async Task<string> GetUserPreferencesAsync(
+        [Description("The user's id")] int userId)
+    {
+        var prefs = await _db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
+
+        if (prefs == null)
+            return "This user has not set any dietary preferences yet — treat as no restrictions.";
+
+        return $"Goal: {prefs.Goal}. Diet type: {prefs.DietType}. " +
+            $"Allergies (MUST avoid these completely): {(string.IsNullOrWhiteSpace(prefs.Allergies) ? "none" : prefs.Allergies)}.";
+    }
 }
