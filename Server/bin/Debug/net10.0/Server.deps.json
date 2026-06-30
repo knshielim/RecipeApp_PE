@@ -1,0 +1,146 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "Server/1.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.AI": "10.7.0",
+          "Microsoft.Extensions.AI.OpenAI": "10.7.0"
+        },
+        "runtime": {
+          "Server.dll": {}
+        }
+      },
+      "Microsoft.Extensions.AI/10.7.0": {
+        "dependencies": {
+          "Microsoft.Extensions.AI.Abstractions": "10.7.0",
+          "System.Numerics.Tensors": "10.0.9"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.AI.dll": {
+            "assemblyVersion": "10.7.0.0",
+            "fileVersion": "10.700.26.30905"
+          }
+        }
+      },
+      "Microsoft.Extensions.AI.Abstractions/10.7.0": {
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.AI.Abstractions.dll": {
+            "assemblyVersion": "10.7.0.0",
+            "fileVersion": "10.700.26.30905"
+          }
+        }
+      },
+      "Microsoft.Extensions.AI.OpenAI/10.7.0": {
+        "dependencies": {
+          "Microsoft.Extensions.AI.Abstractions": "10.7.0",
+          "OpenAI": "2.11.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.AI.OpenAI.dll": {
+            "assemblyVersion": "10.7.0.0",
+            "fileVersion": "10.700.26.30905"
+          }
+        }
+      },
+      "OpenAI/2.11.0": {
+        "dependencies": {
+          "System.ClientModel": "1.10.0"
+        },
+        "runtime": {
+          "lib/net10.0/OpenAI.dll": {
+            "assemblyVersion": "2.11.0.0",
+            "fileVersion": "2.11.0.0"
+          }
+        }
+      },
+      "System.ClientModel/1.10.0": {
+        "dependencies": {
+          "System.Memory.Data": "10.0.3"
+        },
+        "runtime": {
+          "lib/net10.0/System.ClientModel.dll": {
+            "assemblyVersion": "1.10.0.0",
+            "fileVersion": "1.1000.26.16607"
+          }
+        }
+      },
+      "System.Memory.Data/10.0.3": {
+        "runtime": {
+          "lib/net10.0/System.Memory.Data.dll": {
+            "assemblyVersion": "10.0.0.3",
+            "fileVersion": "10.0.326.7603"
+          }
+        }
+      },
+      "System.Numerics.Tensors/10.0.9": {
+        "runtime": {
+          "lib/net10.0/System.Numerics.Tensors.dll": {
+            "assemblyVersion": "10.0.0.9",
+            "fileVersion": "10.0.926.27113"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Server/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Microsoft.Extensions.AI/10.7.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-r8z4uyPq0kTk4+jH92/hPshf3HNUXKOQ9axJwp57QFz43G45BG4DNYpVE0vuSan1dI69LtWx9ttF0Z2ibnghNg==",
+      "path": "microsoft.extensions.ai/10.7.0",
+      "hashPath": "microsoft.extensions.ai.10.7.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.AI.Abstractions/10.7.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Lf822igMm8NkTYHZhTp7kjoNYkLLEvJnX3SkG/LVBvsZHC0Y9choogHz8YtITBoy0TOylM3kVUZ6iaHf0my0ug==",
+      "path": "microsoft.extensions.ai.abstractions/10.7.0",
+      "hashPath": "microsoft.extensions.ai.abstractions.10.7.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.AI.OpenAI/10.7.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-K/xC0SRJeQiHJNNx+ZIYq9liAB5Uy/wUGjHPljEtRW63TCyGWEBkNVU7/UwizTxQk0Tm9pclDEoNmKTw7xtKfg==",
+      "path": "microsoft.extensions.ai.openai/10.7.0",
+      "hashPath": "microsoft.extensions.ai.openai.10.7.0.nupkg.sha512"
+    },
+    "OpenAI/2.11.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-f0y5zOZVNhuc/gPQUHGkiljZlDUq2SddGOkGTPLHnjQC5mCiTCXq1BqxZ+xxxHU6bY0mEtFQJj1RlB2BpwD7Lw==",
+      "path": "openai/2.11.0",
+      "hashPath": "openai.2.11.0.nupkg.sha512"
+    },
+    "System.ClientModel/1.10.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-lBEWs54F5Y5pZ9hC+8z4S/X76957ex+DPk7WecRHlbIHtrPfbRMMlOgI3iDn4Jpb3bSxvBnKaaHoD59auFjlBA==",
+      "path": "system.clientmodel/1.10.0",
+      "hashPath": "system.clientmodel.1.10.0.nupkg.sha512"
+    },
+    "System.Memory.Data/10.0.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-MaGhRfGunmrj/nHjtsi9XkhlYJ/ERGWrbA+BiSKNtGnAjc9XlG5EhAvak6VRcX5LYzPF6pBO8nJ613dTgzabig==",
+      "path": "system.memory.data/10.0.3",
+      "hashPath": "system.memory.data.10.0.3.nupkg.sha512"
+    },
+    "System.Numerics.Tensors/10.0.9": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Rb71S3gggYVwEce9ugNw91vbr4vC4gThtx/imSJtLBW3AupEKujJPPQL6xF9q0DcNm6+z7hnYk7XqXaUpA4wDg==",
+      "path": "system.numerics.tensors/10.0.9",
+      "hashPath": "system.numerics.tensors.10.0.9.nupkg.sha512"
+    }
+  }
+}
