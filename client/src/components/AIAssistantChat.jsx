@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import PreferencesForm from "./PreferencesForm";
 
-// Change this if your backend runs on a different port
 const API = "http://localhost:5237";
 
 async function askAssistant(message) {
@@ -20,10 +19,17 @@ async function askAssistant(message) {
 
 export default function AIAssistantChat() {
   const [messages, setMessages] = useState([
-    { role: "assistant", text: "Hi! Ask me to suggest a meal, summarize your recipes, or plan your week." },
+    { role: "assistant", text: "Hi! Ask me to suggest a meal, summarize your recipes, plan your week, or check what you can make with your pantry." },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showMealCheck, setShowMealCheck] = useState(false);
+  const [mealCheckInput, setMealCheckInput] = useState("");
+  const chatEndRef = useRef(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
   async function send() {
     if (!input.trim() || loading) return;
@@ -45,18 +51,63 @@ export default function AIAssistantChat() {
   }
 
   async function callQuickAction(path, label) {
+    if (loading) return;
+
     setMessages((prev) => [...prev, { role: "user", text: label }]);
     setLoading(true);
     try {
-        const res = await fetch(`${API}${path}`, { method: "POST" });
-        const data = await res.json();
-        setMessages((prev) => [...prev, { role: "assistant", text: data.reply }]);
+      const res = await fetch(`${API}${path}`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || data.error || `Request failed (${res.status})`);
+      }
+      const reply = data.reply?.trim();
+      if (!reply) {
+        throw new Error("The assistant returned an empty response. Please try again.");
+      }
+      setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
     } catch (err) {
-        setMessages((prev) => [...prev, { role: "assistant", text: `Error: ${err.message}` }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: `Sorry, something went wrong: ${err.message}` },
+      ]);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
+  }
+
+  async function checkMealIngredients() {
+    const meal = mealCheckInput.trim();
+    if (!meal || loading) return;
+
+    setShowMealCheck(false);
+    setMealCheckInput("");
+    setMessages((prev) => [...prev, { role: "user", text: `Do I have enough to make ${meal}?` }]);
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/ai/missing-ingredients`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meal }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || data.error || `Request failed (${res.status})`);
+      }
+      const reply = data.reply?.trim();
+      if (!reply) {
+        throw new Error("The assistant returned an empty response. Please try again.");
+      }
+      setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: `Sorry, something went wrong: ${err.message}` },
+      ]);
+    } finally {
+      setLoading(false);
     }
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col items-center p-4">
@@ -91,14 +142,16 @@ export default function AIAssistantChat() {
               </span>
             </div>
           )}
+          <div ref={chatEndRef} />
         </div>
 
-        <div className="flex gap-2 px-3 pt-2">
+        <div className="flex gap-2 px-3 pt-2 flex-wrap">
           <button
             onClick={() =>
               callQuickAction("/api/ai/suggest-meal", "Suggest a meal for me")
             }
-            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full"
+            disabled={loading}
+            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full disabled:opacity-50"
           >
             🍽️ Suggest a meal
           </button>
@@ -107,7 +160,8 @@ export default function AIAssistantChat() {
             onClick={() =>
               callQuickAction("/api/ai/summarize-recipes", "Summarize my recipes")
             }
-            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full"
+            disabled={loading}
+            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full disabled:opacity-50"
           >
             📋 Summarize my recipes
           </button>
@@ -116,11 +170,50 @@ export default function AIAssistantChat() {
             onClick={() =>
               callQuickAction("/api/ai/weekly-plan", "Generate my weekly meal plan")
             }
-            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full"
+            disabled={loading}
+            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full disabled:opacity-50"
           >
             📅 Generate weekly plan
           </button>
+
+          <button
+            onClick={() =>
+              callQuickAction("/api/ai/what-can-i-make", "What can I make with my pantry?")
+            }
+            disabled={loading}
+            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full disabled:opacity-50"
+          >
+            🍳 What can I make?
+          </button>
+
+          <button
+            onClick={() => setShowMealCheck((prev) => !prev)}
+            disabled={loading}
+            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full disabled:opacity-50"
+          >
+            🥘 Do I have enough for a meal?
+          </button>
         </div>
+
+        {showMealCheck && (
+          <div className="flex gap-2 px-3 pb-2">
+            <input
+              value={mealCheckInput}
+              onChange={(e) => setMealCheckInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && checkMealIngredients()}
+              placeholder="e.g. spaghetti carbonara"
+              className="flex-1 border rounded-xl px-3 py-2 text-sm"
+              autoFocus
+            />
+            <button
+              onClick={checkMealIngredients}
+              disabled={!mealCheckInput.trim() || loading}
+              className="bg-[#203966] text-white px-4 rounded-xl disabled:opacity-50 text-sm"
+            >
+              Check
+            </button>
+          </div>
+        )}
 
         <div className="flex gap-2 p-3 border-t">
           <input
@@ -144,4 +237,3 @@ export default function AIAssistantChat() {
     </div>
   );  
 }
-

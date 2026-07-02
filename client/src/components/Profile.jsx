@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import PantryScanner from './PantryScanner';
 
 const API = "http://localhost:5237";
 const USER_ID = 1;
@@ -22,6 +23,7 @@ export default function Profile() {
   });
   const [editingId, setEditingId] = useState(null);
   const [formError, setFormError] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
 
   useEffect(() => {
     fetchProfileData();
@@ -280,9 +282,29 @@ export default function Profile() {
             <div className="bg-white rounded-2xl shadow-lg p-8 border border-green-100">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">My Pantry</h2>
-                <span className="text-sm font-semibold text-green-600 bg-green-50 px-4 py-2 rounded-full">{pantryItems.length} items</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-green-600 bg-green-50 px-4 py-2 rounded-full">{pantryItems.length} items</span>
+                  <button
+                    onClick={() => setShowScanner((v) => !v)}
+                    title="Scan a grocery receipt"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700 transition-all shadow-md text-lg"
+                  >
+                    🧾
+                  </button>
+                </div>
               </div>
-              
+
+              {showScanner && (
+                <div className="mb-6">
+                  <PantryScanner
+                    onAdded={() => {
+                      fetchProfileData();
+                      setShowScanner(false);
+                    }}
+                  />
+                </div>
+              )}
+
               {pantryItems.length > 0 ? (
                 <div className="space-y-4">
                   {pantryItems.map((item) => (
