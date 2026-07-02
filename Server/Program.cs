@@ -1,4 +1,6 @@
 using System.Net;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -6,10 +8,14 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Microsoft.Extensions.AI;
 using System.ClientModel;
 using OpenAI;
+using Microsoft.IdentityModel.Tokens;
+using Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ---------- Services ----------
+// ================================================================
+// ---------- Services (verbatim from Document 1 — untouched) ----------
+// ================================================================
 
 builder.Services.AddCors(o => o.AddDefaultPolicy(
     p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
@@ -41,12 +47,57 @@ builder.Services.AddScoped<Kernel>(sp =>
     return kernel;
 });
 
+// ================================================================
+// ---------- Additive services merged in from Document 2 ----------
+// (Nothing above this block was changed. These only ADD capability;
+//  they don't touch CORS, the DbContext, or the mandatory apiKey check.)
+// ================================================================
+
+builder.Services.AddControllers();
+builder.Services.AddSingleton<TokenService>();
+builder.Services.AddSingleton<UserStore>();
+builder.Services.AddSingleton<ContentStore>();
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // Guarded: if Server:Key isn't configured yet, JWT auth is simply
+        // inert instead of crashing the app at startup (Document 2's
+        // version used `!` and would throw NullReferenceException here).
+        var key = builder.Configuration["Server:Key"];
+        if (!string.IsNullOrWhiteSpace(key))
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = builder.Configuration["Server:Issuer"],
+                ValidAudience = builder.Configuration["Server:Audience"],
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+                RoleClaimType = System.Security.Claims.ClaimTypes.Role,
+                NameClaimType = System.Security.Claims.ClaimTypes.Name
+            };
+        }
+    });
+
+builder.Services.AddAuthorization();
+
+// ================================================================
 // ---------- Build ----------
+// ================================================================
 
 var app = builder.Build();
 app.UseCors();
 
-// seed some test data so the AI has something to read
+// Additive: enables [Authorize] controllers/endpoints if/when you add them.
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
+
+// seed some test data so the AI has something to read (verbatim, Document 1)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -62,7 +113,34 @@ using (var scope = app.Services.CreateScope())
         });
         db.SaveChanges();
     }
+
+    // ---- Additive seed data merged from Document 2 ----
+    // Only runs if these tables are still empty; does not touch the
+    // Recipes seed block above.
+    if (!db.MealPlans.Any())
+    {
+        var recipes = db.Recipes.Where(r => r.UserId == 1).ToList();
+        if (recipes.Count > 0)
+        {
+            db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Monday", MealSlot = "dinner", RecipeId = recipes[0].Id });
+            db.SaveChanges();
+        }
+    }
+
+    if (!db.Pantries.Any())
+    {
+        db.Pantries.AddRange(
+            new Pantry { UserId = 1, IngredientName = "Rice", Category = "Grains", Quantity = 2, Unit = "kg", ExpiryDate = DateTime.UtcNow.AddMonths(6) },
+            new Pantry { UserId = 1, IngredientName = "Eggs", Category = "Proteins", Quantity = 10, Unit = "pieces", ExpiryDate = DateTime.UtcNow.AddDays(14) },
+            new Pantry { UserId = 1, IngredientName = "Soy Sauce", Category = "Spices", Quantity = 1, Unit = "bottle", ExpiryDate = DateTime.UtcNow.AddYears(1) });
+        db.SaveChanges();
+    }
 }
+
+// ================================================================
+// Everything below this line is Document 1, completely unchanged:
+// vision client, HandleAiError, every /api/... endpoint, and records.
+// ================================================================
 
 // ---------- Vision chat client (for receipt image parsing) ----------
 
