@@ -11,12 +11,10 @@ namespace ServerApi.Controllers;
 public class AdminController : ControllerBase
 {
     private readonly UserStore _users;
-    private readonly ContentStore _content;
 
-    public AdminController(UserStore users, ContentStore content)
+    public AdminController(UserStore users)
     {
         _users = users;
-        _content = content;
     }
 
     // GET api/admin/users
@@ -100,17 +98,4 @@ public class AdminController : ControllerBase
         return Ok(new { message = $"Information for '{username}' updated." });
     }
 
-    // GET api/admin/content
-    [HttpGet("content")]
-    public IActionResult GetAllContent() => Ok(_content.GetAll());
-
-    // DELETE api/admin/content/{id}
-    [HttpDelete("content/{id:int}")]
-    public IActionResult DeleteContent(int id)
-    {
-        if (!_content.Delete(id))
-            return NotFound(new { message = "Content not found." });
-            
-        return Ok(new { message = "Content deleted." });
-    }
 }
