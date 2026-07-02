@@ -221,9 +221,173 @@ app.MapPost("/api/ai/weekly-plan", async (Kernel kernel) =>
     }
 });
 
+// ---------- Dashboard Endpoints ----------
+
+app.MapGet("/api/dashboard/stats/{userId:int}", async (int userId, AppDbContext db) =>
+{
+    var totalRecipes = await db.Recipes.CountAsync(r => r.UserId == userId);
+    var totalMealPlans = await db.MealPlans.CountAsync(m => m.UserId == userId);
+
+    return Results.Ok(new
+    {
+        totalRecipes,
+        totalMealPlans
+    });
+});
+
+app.MapGet("/api/dashboard/recent-recipes/{userId:int}", async (int userId, AppDbContext db) =>
+{
+    var recentRecipes = await db.Recipes
+        .Where(r => r.UserId == userId)
+        .OrderByDescending(r => r.Id)
+        .Take(6)
+        .Select(r => new { r.Id, r.Title, r.Category, r.Ingredients })
+        .ToListAsync();
+
+    return Results.Ok(recentRecipes);
+});
+
+app.MapGet("/api/dashboard/weekly-summary/{userId:int}", async (int userId, AppDbContext db) =>
+{
+    var weeklyPlans = await db.MealPlans
+        .Where(m => m.UserId == userId)
+        .Include(m => m.Recipe)
+        .OrderBy(m => m.Day)
+        .ThenBy(m => m.MealSlot)
+        .ToListAsync();
+
+    var mealsByDay = weeklyPlans
+        .GroupBy(m => m.Day)
+        .Select(g => new
+        {
+            Day = g.Key,
+            Meals = g.Select(m => new { m.MealSlot, RecipeTitle = m.Recipe.Title })
+        })
+        .ToList();
+
+    return Results.Ok(mealsByDay);
+});
+
+// ---------- Pantry Endpoints ----------
+
+app.MapGet("/api/pantry/{userId:int}", async (int userId, AppDbContext db) =>
+{
+    var pantryItems = await db.Pantries
+        .Where(p => p.UserId == userId)
+        .OrderBy(p => p.Category)
+        .ThenBy(p => p.IngredientName)
+        .ToListAsync();
+
+    return Results.Ok(pantryItems);
+});
+
+app.MapPost("/api/pantry", async (PantryRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.IngredientName) || string.IsNullOrWhiteSpace(req.Category))
+        return Results.BadRequest(new { error = "Ingredient name and category are required." });
+
+    var pantryItem = new Pantry
+    {
+        UserId = req.UserId,
+        IngredientName = req.IngredientName,
+        Category = req.Category,
+        Quantity = req.Quantity > 0 ? req.Quantity : 1,
+        Unit = req.Unit ?? "",
+        ExpiryDate = req.ExpiryDate
+    };
+
+    db.Pantries.Add(pantryItem);
+    await db.SaveChangesAsync();
+
+    return Results.Ok(pantryItem);
+});
+
+app.MapPut("/api/pantry/{id:int}", async (int id, PantryRequest req, AppDbContext db) =>
+{
+    var pantryItem = await db.Pantries.FindAsync(id);
+    if (pantryItem == null)
+        return Results.NotFound();
+
+    if (string.IsNullOrWhiteSpace(req.IngredientName) || string.IsNullOrWhiteSpace(req.Category))
+        return Results.BadRequest(new { error = "Ingredient name and category are required." });
+
+    pantryItem.IngredientName = req.IngredientName;
+    pantryItem.Category = req.Category;
+    pantryItem.Quantity = req.Quantity > 0 ? req.Quantity : 1;
+    pantryItem.Unit = req.Unit ?? "";
+    pantryItem.ExpiryDate = req.ExpiryDate;
+
+    await db.SaveChangesAsync();
+
+    return Results.Ok(pantryItem);
+});
+
+app.MapDelete("/api/pantry/{id:int}", async (int id, AppDbContext db) =>
+{
+    var pantryItem = await db.Pantries.FindAsync(id);
+    if (pantryItem == null)
+        return Results.NotFound();
+
+    db.Pantries.Remove(pantryItem);
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new { message = "Item deleted successfully." });
+});
+
+// ---------- Profile/Chart Endpoints ----------
+
+app.MapGet("/api/profile/meal-stats/{userId:int}", async (int userId, AppDbContext db) =>
+{
+    var mealsByDay = await db.MealPlans
+        .Where(m => m.UserId == userId)
+        .GroupBy(m => m.Day)
+        .Select(g => new
+        {
+            Day = g.Key,
+            Count = g.Count()
+        })
+        .ToListAsync();
+
+    return Results.Ok(mealsByDay);
+});
+
+app.MapGet("/api/profile/recent-activity/{userId:int}", async (int userId, AppDbContext db) =>
+{
+    var recentRecipes = await db.Recipes
+        .Where(r => r.UserId == userId)
+        .OrderByDescending(r => r.Id)
+        .Take(5)
+        .Select(r => new
+        {
+            Type = "Recipe",
+            Title = r.Title,
+            Timestamp = DateTime.Now.AddDays(-r.Id) // Simulated timestamp
+        })
+        .ToListAsync();
+
+    var recentMealPlans = await db.MealPlans
+        .Where(m => m.UserId == userId)
+        .OrderByDescending(m => m.Id)
+        .Take(3)
+        .Select(m => new
+        {
+            Type = "Meal Plan",
+            Title = $"{m.Day} - {m.MealSlot}",
+            Timestamp = DateTime.Now.AddDays(-m.Id) // Simulated timestamp
+        })
+        .ToListAsync();
+
+    var allActivity = recentRecipes.Concat(recentMealPlans)
+        .OrderByDescending(a => a.Timestamp)
+        .ToList();
+
+    return Results.Ok(allActivity);
+});
+
 app.Run("http://localhost:5237");
 
 // ---------- Records ----------
 
 record ChatRequest(string Message);
 record SavePreferencesRequest(int UserId, string Goal, string DietType, string Allergies);
+record PantryRequest(int UserId, string IngredientName, string Category, int Quantity, string Unit, DateTime ExpiryDate);

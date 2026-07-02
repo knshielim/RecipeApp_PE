@@ -7,4 +7,5 @@ public class AppDbContext : DbContext
     public DbSet<Recipe> Recipes => Set<Recipe>();
     public DbSet<MealPlan> MealPlans => Set<MealPlan>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
+    public DbSet<Pantry> Pantries => Set<Pantry>();
 }
