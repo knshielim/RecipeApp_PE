@@ -3124,19 +3124,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\Keisha Nalani\\.nuget\\packages\\": {}
+    "C:\\Users\\gfcat\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Keisha Nalani\\Documents\\GitHub\\RecipeApp_PE\\Server\\Server.csproj",
+      "projectUniqueName": "D:\\Felix\\Software\\Github\\RecipeApp_PE\\Server\\Server.csproj",
       "projectName": "Server",
-      "projectPath": "C:\\Users\\Keisha Nalani\\Documents\\GitHub\\RecipeApp_PE\\Server\\Server.csproj",
-      "packagesPath": "C:\\Users\\Keisha Nalani\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\Keisha Nalani\\Documents\\GitHub\\RecipeApp_PE\\Server\\obj\\",
+      "projectPath": "D:\\Felix\\Software\\Github\\RecipeApp_PE\\Server\\Server.csproj",
+      "packagesPath": "C:\\Users\\gfcat\\.nuget\\packages\\",
+      "outputPath": "D:\\Felix\\Software\\Github\\RecipeApp_PE\\Server\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\Keisha Nalani\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "C:\\Users\\gfcat\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net10.0"
