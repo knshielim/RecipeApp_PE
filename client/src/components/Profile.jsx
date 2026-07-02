@@ -8,11 +8,20 @@ const USER_ID = 1;
 
 const CATEGORIES = ["Vegetables", "Proteins", "Dairy", "Grains", "Spices", "Fruits", "Oils", "Other"];
 
-export default function Profile() {
+export default function Profile({ token, username }) {
   const [pantryItems, setPantryItems] = useState([]);
   const [mealStats, setMealStats] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Account information state
+  const [account, setAccount] = useState(null);
+  const [editingAccount, setEditingAccount] = useState(false);
+  const [accountForm, setAccountForm] = useState({
+    fullName: '', email: '', phoneNumber: '', dateOfBirth: '', gender: ''
+  });
+  const [accountStatus, setAccountStatus] = useState({ type: '', msg: '' });
+  const [savingAccount, setSavingAccount] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -29,7 +38,83 @@ export default function Profile() {
 
   useEffect(() => {
     fetchProfileData();
+    fetchAccount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchAccount = async () => {
+    try {
+      const res = await fetch(`${API}/api/auth/profile`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Could not load account information.');
+      const data = await res.json();
+      setAccount(data);
+      setAccountForm({
+        fullName: data.fullName || '',
+        email: data.email || '',
+        phoneNumber: data.phoneNumber || '',
+        dateOfBirth: data.dateOfBirth || '',
+        gender: data.gender || ''
+      });
+    } catch (error) {
+      setAccountStatus({ type: 'error', msg: error.message });
+    }
+  };
+
+  const handleAccountInput = (e) => {
+    const { name, value } = e.target;
+    setAccountForm(prev => ({ ...prev, [name]: value }));
+    setAccountStatus({ type: '', msg: '' });
+  };
+
+  const handleAccountSave = async (e) => {
+    e.preventDefault();
+    if (!accountForm.fullName.trim()) {
+      setAccountStatus({ type: 'error', msg: 'Full name is required.' });
+      return;
+    }
+    if (!accountForm.email.trim() || !accountForm.email.includes('@')) {
+      setAccountStatus({ type: 'error', msg: 'A valid email is required.' });
+      return;
+    }
+
+    setSavingAccount(true);
+    try {
+      const res = await fetch(`${API}/api/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(accountForm)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Failed to update profile.');
+
+      setAccountStatus({ type: 'success', msg: data.message || 'Profile updated.' });
+      setEditingAccount(false);
+      fetchAccount();
+    } catch (error) {
+      setAccountStatus({ type: 'error', msg: error.message });
+    } finally {
+      setSavingAccount(false);
+    }
+  };
+
+  const handleAccountCancel = () => {
+    setEditingAccount(false);
+    setAccountStatus({ type: '', msg: '' });
+    if (account) {
+      setAccountForm({
+        fullName: account.fullName || '',
+        email: account.email || '',
+        phoneNumber: account.phoneNumber || '',
+        dateOfBirth: account.dateOfBirth || '',
+        gender: account.gender || ''
+      });
+    }
+  };
 
   const fetchProfileData = async () => {
     try {
@@ -168,14 +253,14 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-green-50">
-        <div className="text-gray-600">Loading your profile...</div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-slate-600">Loading your profile...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-white">
+    <div className="min-h-screen bg-slate-50">
       {/* Profile Header */}
       <div className="bg-gradient-to-r from-green-600 to-green-700 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -186,8 +271,15 @@ export default function Profile() {
               </svg>
             </div>
             <div>
-              <h1 className="text-4xl font-bold mb-2">My Profile</h1>
-              <p className="text-green-100 text-lg">Manage your pantry and track your cooking journey</p>
+              <h1 className="text-4xl font-bold mb-2">
+                {account?.fullName || username || 'My Profile'}
+              </h1>
+              {account && (
+                <p className="text-green-100 mb-1">
+                  @{account.username} · {account.role}
+                </p>
+              )}
+              <p className="text-green-100 text-lg">Manage your account, pantry and track your cooking journey</p>
             </div>
           </div>
         </div>
@@ -195,34 +287,180 @@ export default function Profile() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Pantry Management */}
+          {/* Left Column - Account & Pantry Management */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Account Information */}
+            <div className="bg-white rounded-xl shadow-sm p-8 border border-slate-100">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-slate-900">Account Information</h2>
+                {!editingAccount && (
+                  <button
+                    onClick={() => { setEditingAccount(true); setAccountStatus({ type: '', msg: '' }); }}
+                    className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm"
+                  >
+                    Edit Profile
+                  </button>
+                )}
+              </div>
+
+              {accountStatus.msg && (
+                <p className={`text-sm font-medium p-3 rounded-lg mb-5 ${
+                  accountStatus.type === 'success'
+                    ? 'text-emerald-700 bg-emerald-50 border border-emerald-100'
+                    : 'text-red-600 bg-red-50 border border-red-100'
+                }`}>
+                  {accountStatus.msg}
+                </p>
+              )}
+
+              {!editingAccount ? (
+                /* ---- View mode ---- */
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+                  <div>
+                    <p className="text-sm text-slate-500">Username</p>
+                    <p className="font-semibold text-slate-900 mt-0.5">{account?.username || username || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">Full Name</p>
+                    <p className="font-semibold text-slate-900 mt-0.5">{account?.fullName || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">Email</p>
+                    <p className="font-semibold text-slate-900 mt-0.5">{account?.email || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">Phone Number</p>
+                    <p className="font-semibold text-slate-900 mt-0.5">{account?.phoneNumber || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">Date of Birth</p>
+                    <p className="font-semibold text-slate-900 mt-0.5">{account?.dateOfBirth ? formatDate(account.dateOfBirth) : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">Gender</p>
+                    <p className="font-semibold text-slate-900 mt-0.5">{account?.gender || '—'}</p>
+                  </div>
+                </div>
+              ) : (
+                /* ---- Edit mode ---- */
+                <form onSubmit={handleAccountSave} className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Username</label>
+                      <input
+                        type="text"
+                        value={account?.username || username || ''}
+                        disabled
+                        className="w-full border border-slate-200 bg-slate-50 text-slate-500 rounded-lg px-4 py-3 cursor-not-allowed"
+                      />
+                      <p className="text-xs text-slate-400 mt-1">Username cannot be changed.</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name *</label>
+                      <input
+                        type="text"
+                        name="fullName"
+                        value={accountForm.fullName}
+                        onChange={handleAccountInput}
+                        className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
+                        placeholder="e.g., Alice Tan"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Email *</label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={accountForm.email}
+                        onChange={handleAccountInput}
+                        className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
+                        placeholder="you@example.com"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Phone Number</label>
+                      <input
+                        type="tel"
+                        name="phoneNumber"
+                        value={accountForm.phoneNumber}
+                        onChange={handleAccountInput}
+                        className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
+                        placeholder="08xxxxxxxxxx"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Date of Birth</label>
+                      <input
+                        type="date"
+                        name="dateOfBirth"
+                        value={accountForm.dateOfBirth}
+                        onChange={handleAccountInput}
+                        className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Gender</label>
+                      <select
+                        name="gender"
+                        value={accountForm.gender}
+                        onChange={handleAccountInput}
+                        className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all bg-white"
+                      >
+                        <option value="">Prefer not to say</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <button
+                      type="submit"
+                      disabled={savingAccount}
+                      className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold shadow-sm hover:shadow-md disabled:opacity-50"
+                    >
+                      {savingAccount ? 'Saving...' : 'Save Changes'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAccountCancel}
+                      className="bg-slate-100 text-slate-700 px-8 py-3 rounded-lg hover:bg-slate-200 transition-colors font-semibold"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
             {/* Add/Edit Item Form */}
-            <div className="bg-white rounded-2xl shadow-lg p-8 border border-green-100">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">
+            <div className="bg-white rounded-xl shadow-sm p-8 border border-slate-100">
+              <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 {editingId ? 'Edit Pantry Item' : 'Add to Pantry'}
               </h2>
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Ingredient Name *</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Ingredient Name *</label>
                     <input
                       type="text"
                       name="ingredientName"
                       value={formData.ingredientName}
                       onChange={handleInputChange}
-                      className="w-full border-2 border-green-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                      className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
                       placeholder="e.g., Tomatoes"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Category *</label>
                     <select
                       name="category"
                       value={formData.category}
                       onChange={handleInputChange}
-                      className="w-full border-2 border-green-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                      className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
                       required
                     >
                       {CATEGORIES.map(cat => (
@@ -231,36 +469,36 @@ export default function Profile() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Quantity *</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Quantity *</label>
                     <input
                       type="number"
                       name="quantity"
                       value={formData.quantity}
                       onChange={handleInputChange}
                       min="1"
-                      className="w-full border-2 border-green-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                      className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Unit</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Unit</label>
                     <input
                       type="text"
                       name="unit"
                       value={formData.unit}
                       onChange={handleInputChange}
-                      className="w-full border-2 border-green-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                      className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
                       placeholder="e.g., kg, pieces, cups"
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Expiry Date</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Expiry Date</label>
                     <input
                       type="date"
                       name="expiryDate"
                       value={formData.expiryDate}
                       onChange={handleInputChange}
-                      className="w-full border-2 border-green-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                      className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
                     />
                   </div>
                 </div>
@@ -270,7 +508,7 @@ export default function Profile() {
                 <div className="flex gap-4">
                   <button
                     type="submit"
-                    className="bg-green-600 text-white px-8 py-3 rounded-xl hover:bg-green-700 transition-all font-semibold shadow-md hover:shadow-lg"
+                    className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold shadow-sm hover:shadow-md"
                   >
                     {editingId ? 'Update Item' : 'Add Item'}
                   </button>
@@ -278,7 +516,7 @@ export default function Profile() {
                     <button
                       type="button"
                       onClick={handleCancelEdit}
-                      className="bg-gray-100 text-gray-700 px-8 py-3 rounded-xl hover:bg-gray-200 transition-all font-semibold"
+                      className="bg-slate-100 text-slate-700 px-8 py-3 rounded-lg hover:bg-slate-200 transition-colors font-semibold"
                     >
                       Cancel
                     </button>
@@ -288,22 +526,22 @@ export default function Profile() {
             </div>
 
             {/* Pantry Items List */}
-            <div className="bg-white rounded-2xl shadow-lg p-8 border border-green-100">
+            <div className="bg-white rounded-xl shadow-sm p-8 border border-slate-100">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">My Pantry</h2>
+                <h2 className="text-2xl font-bold text-slate-900">My Pantry</h2>
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-semibold text-green-600 bg-green-50 px-4 py-2 rounded-full">{pantryItems.length} items</span>
                   <button
                     onClick={() => { setShowScanner((v) => !v); setShowDetector(false); }}
                     title="Scan a grocery receipt"
-                    className="w-10 h-10 flex items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700 transition-all shadow-md text-lg"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm text-lg"
                   >
                     🧾
                   </button>
                   <button
                     onClick={() => { setShowDetector((v) => !v); setShowScanner(false); }}
                     title="Detect items from a photo"
-                    className="w-10 h-10 flex items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700 transition-all shadow-md text-lg"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm text-lg"
                   >
                     📷
                   </button>
@@ -337,21 +575,21 @@ export default function Profile() {
                   {pantryItems.map((item) => (
                     <div
                       key={item.id}
-                      className={`border-2 rounded-2xl p-5 flex justify-between items-start transition-all hover:shadow-md ${
+                      className={`border rounded-xl p-5 flex justify-between items-start transition-all hover:shadow-md ${
                         isExpired(item.expiryDate) ? 'border-red-300 bg-red-50' :
                         isExpiringSoon(item.expiryDate) ? 'border-yellow-300 bg-yellow-50' :
-                        'border-green-100 bg-white'
+                        'border-slate-100 bg-white'
                       }`}
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-bold text-gray-800 text-lg">{item.ingredientName}</h3>
-                          <span className="text-xs font-semibold bg-green-100 text-green-700 px-3 py-1 rounded-full">{item.category}</span>
+                          <h3 className="font-bold text-slate-900 text-lg">{item.ingredientName}</h3>
+                          <span className="text-xs font-semibold bg-green-50 text-green-600 px-3 py-1 rounded-full">{item.category}</span>
                         </div>
-                        <p className="text-sm text-gray-600 mb-1">
+                        <p className="text-sm text-slate-600 mb-1">
                           Quantity: <span className="font-semibold">{item.quantity}</span> {item.unit}
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-slate-500">
                           Expires: {formatDate(item.expiryDate)}
                           {isExpired(item.expiryDate) && <span className="text-red-500 font-semibold ml-2">(Expired)</span>}
                           {isExpiringSoon(item.expiryDate) && !isExpired(item.expiryDate) && <span className="text-yellow-600 font-semibold ml-2">(Expiring Soon)</span>}
@@ -360,13 +598,13 @@ export default function Profile() {
                       <div className="flex gap-3">
                         <button
                           onClick={() => handleEdit(item)}
-                          className="text-green-600 hover:text-green-800 font-semibold text-sm px-3 py-1 rounded-lg hover:bg-green-50 transition-all"
+                          className="text-green-600 hover:text-green-700 font-semibold text-sm px-3 py-1 rounded-lg hover:bg-green-50 transition-colors"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(item.id)}
-                          className="text-red-600 hover:text-red-800 font-semibold text-sm px-3 py-1 rounded-lg hover:bg-red-50 transition-all"
+                          className="text-red-600 hover:text-red-800 font-semibold text-sm px-3 py-1 rounded-lg hover:bg-red-50 transition-colors"
                         >
                           Delete
                         </button>
@@ -375,11 +613,11 @@ export default function Profile() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 text-gray-500">
-                  <svg className="w-20 h-20 text-green-200 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="text-center py-12 text-slate-500">
+                  <svg className="w-20 h-20 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                   </svg>
-                  <p className="text-lg font-semibold text-gray-600">Your pantry is empty</p>
+                  <p className="text-lg font-semibold text-slate-600">Your pantry is empty</p>
                   <p className="text-sm">Add ingredients to get started!</p>
                 </div>
               )}
@@ -389,13 +627,13 @@ export default function Profile() {
           {/* Right Column - Stats & Activity */}
           <div className="lg:col-span-1 space-y-6">
             {/* Meals Per Week Chart */}
-            <div className="bg-white rounded-2xl shadow-lg p-6 border border-green-100">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">Meals Planned</h2>
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100">
+              <h2 className="text-xl font-bold text-slate-900 mb-4">Meals Planned</h2>
               {mealStats.length > 0 ? (
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={mealStats}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="Day" tick={{ fontSize: 11, fill: '#6b7280' }} />
+                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#6b7280' }} />
                     <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} />
                     <Tooltip 
                       contentStyle={{ 
@@ -406,59 +644,59 @@ export default function Profile() {
                       }} 
                     />
                     <Legend />
-                    <Bar dataKey="Count" fill="#16a34a" name="Meals" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="count" fill="#16a34a" name="Meals" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="text-center py-10 text-gray-500">
+                <div className="text-center py-10 text-slate-500">
                   <p>No meal plan data yet</p>
                 </div>
               )}
             </div>
 
             {/* Recent Activity Feed */}
-            <div className="bg-white rounded-2xl shadow-lg p-6 border border-green-100">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">Recent Activity</h2>
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100">
+              <h2 className="text-xl font-bold text-slate-900 mb-4">Recent Activity</h2>
               {recentActivity.length > 0 ? (
                 <div className="space-y-4">
                   {recentActivity.map((activity, idx) => (
-                    <div key={idx} className="flex items-start gap-3 pb-4 border-b border-green-50 last:border-0 last:pb-0">
+                    <div key={idx} className="flex items-start gap-3 pb-4 border-b border-slate-100 last:border-0 last:pb-0">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        activity.type === 'Recipe' ? 'bg-green-100' : 'bg-blue-100'
+                        activity.type === 'Recipe' ? 'bg-blue-100' : 'bg-purple-100'
                       }`}>
                         {activity.type === 'Recipe' ? (
-                          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                         ) : (
-                          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{activity.title}</p>
-                        <p className="text-xs text-gray-500 mt-1">{formatDate(activity.timestamp)}</p>
+                        <p className="text-sm font-semibold text-slate-900 truncate">{activity.title}</p>
+                        <p className="text-xs text-slate-500 mt-1">{formatDate(activity.timestamp)}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-10 text-gray-500">
+                <div className="text-center py-10 text-slate-500">
                   <p>No recent activity</p>
                 </div>
               )}
             </div>
 
             {/* Quick Stats */}
-            <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-2xl shadow-lg p-6 text-white">
+            <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-xl shadow-sm p-6 text-white">
               <h2 className="text-xl font-bold mb-5">Quick Stats</h2>
               <div className="space-y-4">
-                <div className="flex justify-between items-center pb-3 border-b border-green-500/30">
+                <div className="flex justify-between items-center pb-3 border-b border-white/20">
                   <span className="text-green-100">Pantry Items</span>
                   <span className="font-bold text-2xl">{pantryItems.length}</span>
                 </div>
-                <div className="flex justify-between items-center pb-3 border-b border-green-500/30">
+                <div className="flex justify-between items-center pb-3 border-b border-white/20">
                   <span className="text-green-100">Expiring Soon</span>
                   <span className="font-bold text-2xl">{pantryItems.filter(i => isExpiringSoon(i.expiryDate) && !isExpired(i.expiryDate)).length}</span>
                 </div>
