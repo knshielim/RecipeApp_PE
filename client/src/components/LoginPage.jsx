@@ -1,0 +1,192 @@
+import { useState } from "react";
+
+const API = "http://localhost:5237";
+
+const ROLES = [
+  {
+    id: "User",
+    label: "User",
+    desc: "Personal dashboard & your own content",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    id: "Admin",
+    label: "Admin",
+    desc: "Manage users & view all content",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+        <path d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z" strokeLinejoin="round" />
+        <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+];
+
+function LoginPage({ onLoginSuccess, onGoToRegister }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState("User");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password, role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Login failed.");
+      onLoginSuccess(data.token, data.username, data.role);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+      <div className="w-full max-w-4xl bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden grid md:grid-cols-[1.1fr_1.3fr]">
+
+        {/* Brand panel — dashboard hero gradient */}
+        <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-10 flex flex-col justify-between relative overflow-hidden max-md:hidden">
+          <div
+            className="absolute inset-0 opacity-[0.07]"
+            style={{
+              backgroundImage:
+                "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
+              backgroundSize: "28px 28px",
+            }}
+          />
+          <div className="relative">
+            <div className="flex items-center gap-2.5">
+              <span className="w-9 h-9 rounded-xl bg-white/10 backdrop-blur grid place-items-center font-bold text-lg text-white border border-white/20">
+                R
+              </span>
+              <span className="font-semibold text-lg tracking-tight">
+                RecipeApp
+              </span>
+            </div>
+            <h1 className="font-bold text-3xl leading-tight mt-12">
+              Welcome to
+              <br />
+              Your Kitchen.
+            </h1>
+            <p className="text-green-100 text-sm mt-4 leading-relaxed">
+              Sign in to reach your dashboard — recipes, weekly meal plans,
+              your pantry, and an AI assistant that cooks up ideas with you.
+            </p>
+          </div>
+          <div className="relative font-mono text-[11px] text-green-200 leading-relaxed">
+            <p className="text-green-200/60 mb-1">// demo accounts</p>
+            <p>admin&nbsp;/ admin123&nbsp;&nbsp;&nbsp;→ Admin</p>
+            <p>alice&nbsp;&nbsp;/ password123 → User</p>
+          </div>
+        </div>
+
+        {/* Form panel */}
+        <div className="p-8 sm:p-10 flex flex-col justify-center">
+          <h2 className="font-bold text-2xl text-slate-900">Sign in</h2>
+          <p className="text-sm text-slate-500 mt-1 mb-6">
+            Choose your role, then enter your credentials.
+          </p>
+
+          {/* Role selector */}
+          <div className="grid grid-cols-2 gap-3 mb-6" role="radiogroup" aria-label="Role">
+            {ROLES.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                role="radio"
+                aria-checked={role === r.id}
+                onClick={() => setRole(r.id)}
+                className={`text-left rounded-xl border-2 p-4 transition focus-visible:outline-none
+                  ${role === r.id
+                    ? "border-green-600 bg-green-50"
+                    : "border-slate-200 hover:border-slate-300"}`}
+              >
+                <span
+                  className={`inline-grid place-items-center w-9 h-9 rounded-xl mb-2
+                    ${role === r.id ? "bg-green-600 text-white" : "bg-slate-100 text-slate-500"}`}
+                >
+                  {r.icon}
+                </span>
+                <p className="font-semibold text-slate-900">{r.label}</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-snug">{r.desc}</p>
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="login-username" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Username
+              </label>
+              <input
+                id="login-username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="login-password" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Password
+              </label>
+              <input
+                id="login-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
+                required
+              />
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3.5 py-2.5">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg
+                font-semibold transition-colors disabled:opacity-50 mt-2 shadow-sm"
+            >
+              {loading ? "Signing in..." : `Sign in as ${role}`}
+            </button>
+          </form>
+
+          <p className="text-sm text-center text-slate-500 mt-6">
+            Don&apos;t have an account?{" "}
+            <button
+              onClick={onGoToRegister}
+              className="text-green-600 font-semibold hover:text-green-700 hover:underline"
+            >
+              Create one
+            </button>
+          </p>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+export default LoginPage;
