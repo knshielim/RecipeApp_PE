@@ -48,9 +48,9 @@ export default function PantryScanner({ onAdded }) {
     );
   }
 
-  function updateQuantity(index, value) {
+  function updateField(index, field, value) {
     setParsedItems((prev) =>
-      prev.map((it, i) => (i === index ? { ...it, quantity: value } : it))
+      prev.map((it, i) => (i === index ? { ...it, [field]: value } : it))
     );
   }
 
@@ -63,7 +63,7 @@ export default function PantryScanner({ onAdded }) {
       const res = await fetch(`${API}/api/pantry/bulk-add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(selected.map(({ name, quantity }) => ({ name, quantity }))),
+        body: JSON.stringify(selected.map(({ name, quantity, unit }) => ({ name, quantity, unit }))),
       });
       if (!res.ok) throw new Error("Failed to add to pantry");
       setDone(true);
@@ -118,9 +118,16 @@ export default function PantryScanner({ onAdded }) {
                 />
                 <span className="flex-1 text-sm capitalize">{item.name}</span>
                 <input
-                  value={item.quantity}
-                  onChange={(e) => updateQuantity(i, e.target.value)}
-                  className="w-24 border rounded-lg px-2 py-1 text-sm"
+                  value={item.quantity ?? ""}
+                  onChange={(e) => updateField(i, "quantity", e.target.value)}
+                  placeholder="qty"
+                  className="w-16 border rounded-lg px-2 py-1 text-sm"
+                />
+                <input
+                  value={item.unit ?? ""}
+                  onChange={(e) => updateField(i, "unit", e.target.value)}
+                  placeholder="unit"
+                  className="w-20 border rounded-lg px-2 py-1 text-sm"
                 />
               </div>
             ))}

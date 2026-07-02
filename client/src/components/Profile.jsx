@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import PantryScanner from './PantryScanner';
+import PantryObjectDetector from './PantryObjectDetector';
 
 const API = "http://localhost:5237";
 const USER_ID = 1;
@@ -24,6 +25,7 @@ export default function Profile() {
   const [editingId, setEditingId] = useState(null);
   const [formError, setFormError] = useState('');
   const [showScanner, setShowScanner] = useState(false);
+  const [showDetector, setShowDetector] = useState(false);
 
   useEffect(() => {
     fetchProfileData();
@@ -66,8 +68,8 @@ export default function Profile() {
       setFormError('Category is required');
       return false;
     }
-    if (formData.quantity <= 0) {
-      setFormError('Quantity must be greater than 0');
+    if (formData.quantity === '' || isNaN(Number(formData.quantity)) || Number(formData.quantity) <= 0) {
+      setFormError('Quantity must be a number greater than 0');
       return false;
     }
     return true;
@@ -78,27 +80,33 @@ export default function Profile() {
     if (!validateForm()) return;
 
     try {
+      const defaultExpiry = new Date();
+      defaultExpiry.setDate(defaultExpiry.getDate() + 30);
+
       const payload = {
         userId: USER_ID,
         ingredientName: formData.ingredientName.trim(),
         category: formData.category,
-        quantity: parseInt(formData.quantity),
+        quantity: parseInt(formData.quantity, 10),
         unit: formData.unit.trim(),
-        expiryDate: formData.expiryDate ? new Date(formData.expiryDate) : new Date().AddDays(30)
+        expiryDate: formData.expiryDate ? new Date(formData.expiryDate) : defaultExpiry
       };
 
-      if (editingId) {
-        await fetch(`${API}/api/pantry/${editingId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      } else {
-        await fetch(`${API}/api/pantry`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+      const res = editingId
+        ? await fetch(`${API}/api/pantry/${editingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+        : await fetch(`${API}/api/pantry`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to save item (status ${res.status}).`);
       }
 
       setFormData({ ingredientName: '', category: 'Vegetables', quantity: 1, unit: '', expiryDate: '' });
@@ -106,7 +114,7 @@ export default function Profile() {
       setFormError('');
       fetchProfileData();
     } catch (error) {
-      setFormError('Failed to save item. Please try again.');
+      setFormError(error.message || 'Failed to save item. Please try again.');
     }
   };
 
@@ -120,6 +128,7 @@ export default function Profile() {
     });
     setEditingId(item.id);
     setFormError('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (id) => {
@@ -285,11 +294,18 @@ export default function Profile() {
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-semibold text-green-600 bg-green-50 px-4 py-2 rounded-full">{pantryItems.length} items</span>
                   <button
-                    onClick={() => setShowScanner((v) => !v)}
+                    onClick={() => { setShowScanner((v) => !v); setShowDetector(false); }}
                     title="Scan a grocery receipt"
                     className="w-10 h-10 flex items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700 transition-all shadow-md text-lg"
                   >
                     🧾
+                  </button>
+                  <button
+                    onClick={() => { setShowDetector((v) => !v); setShowScanner(false); }}
+                    title="Detect items from a photo"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700 transition-all shadow-md text-lg"
+                  >
+                    📷
                   </button>
                 </div>
               </div>
@@ -300,6 +316,17 @@ export default function Profile() {
                     onAdded={() => {
                       fetchProfileData();
                       setShowScanner(false);
+                    }}
+                  />
+                </div>
+              )}
+
+              {showDetector && (
+                <div className="mb-6">
+                  <PantryObjectDetector
+                    onAdded={() => {
+                      fetchProfileData();
+                      setShowDetector(false);
                     }}
                   />
                 </div>
@@ -322,7 +349,7 @@ export default function Profile() {
                           <span className="text-xs font-semibold bg-green-100 text-green-700 px-3 py-1 rounded-full">{item.category}</span>
                         </div>
                         <p className="text-sm text-gray-600 mb-1">
-                          <span className="font-semibold">{item.quantity}</span> {item.unit}
+                          Quantity: <span className="font-semibold">{item.quantity}</span> {item.unit}
                         </p>
                         <p className="text-xs text-gray-500">
                           Expires: {formatDate(item.expiryDate)}
