@@ -728,5 +728,3 @@ record ParsedItem(string Name, string? Quantity, string? Unit);
 record MealCheckRequest(string Meal);
 record DetectedObject(string Label, double Confidence, int YMin, int XMin, int YMax, int XMax, string? Unit);
 record DetectionResult(List<DetectedObject> Objects, string Summary);
-record DetectedObject(string Label, double Confidence, int YMin, int XMin, int YMax, int XMax, string? Unit);
-record DetectionResult(List<DetectedObject> Objects, string Summary);
