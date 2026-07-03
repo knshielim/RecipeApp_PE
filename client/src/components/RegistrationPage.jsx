@@ -139,7 +139,6 @@ function RegistrationPage({ onGoToLogin }) {
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 autoComplete="tel"
-                placeholder="08xxxxxxxxxx"
                 className={inputClass}
                 required
               />
