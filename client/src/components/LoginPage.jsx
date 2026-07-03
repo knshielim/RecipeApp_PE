@@ -6,7 +6,6 @@ const ROLES = [
   {
     id: "User",
     label: "User",
-    desc: "Personal dashboard & your own content",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
         <circle cx="12" cy="8" r="4" />
@@ -17,7 +16,6 @@ const ROLES = [
   {
     id: "Admin",
     label: "Admin",
-    desc: "Manage users & view all content",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
         <path d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z" strokeLinejoin="round" />
@@ -82,15 +80,6 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
               <br />
               Your Kitchen.
             </h1>
-            <p className="text-green-100 text-sm mt-4 leading-relaxed">
-              Sign in to reach your dashboard — recipes, weekly meal plans,
-              your pantry, and an AI assistant that cooks up ideas with you.
-            </p>
-          </div>
-          <div className="relative font-mono text-[11px] text-green-200 leading-relaxed">
-            <p className="text-green-200/60 mb-1">// demo accounts</p>
-            <p>admin&nbsp;/ admin123&nbsp;&nbsp;&nbsp;→ Admin</p>
-            <p>alice&nbsp;&nbsp;/ password123 → User</p>
           </div>
         </div>
 
@@ -179,7 +168,7 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
               onClick={onGoToRegister}
               className="text-green-600 font-semibold hover:text-green-700 hover:underline"
             >
-              Create one
+              Create account
             </button>
           </p>
         </div>
@@ -190,3 +179,4 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
 }
 
 export default LoginPage;
+
