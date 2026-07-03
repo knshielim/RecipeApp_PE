@@ -23,20 +23,26 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite("Data Source=ai_assistant_dev.db"));
 
-string apiKey = builder.Configuration["GoogleAI:ApiKey"]
-    ?? throw new Exception("GoogleAI:ApiKey not found");
+// GoogleAI:ApiKey is now optional: without it the app still starts and
+// login/non-AI features work fine. Only the AI/vision endpoints will
+// return a "not configured" response until a real key is added.
+string? apiKey = builder.Configuration["GoogleAI:ApiKey"];
+if (string.IsNullOrWhiteSpace(apiKey)) apiKey = null;
 
 builder.Services.AddScoped<Kernel>(sp =>
 {
     var kernelBuilder = Kernel.CreateBuilder();
 
-    var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+    if (apiKey is not null)
+    {
+        var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 
-    kernelBuilder.AddOpenAIChatCompletion(
-        modelId: "gemini-2.5-flash",
-        apiKey: apiKey,
-        endpoint: new Uri("https://generativelanguage.googleapis.com/v1beta/openai/"),
-        httpClient: httpClient);
+        kernelBuilder.AddOpenAIChatCompletion(
+            modelId: "gemini-2.5-flash",
+            apiKey: apiKey,
+            endpoint: new Uri("https://generativelanguage.googleapis.com/v1beta/openai/"),
+            httpClient: httpClient);
+    }
 
     var kernel = kernelBuilder.Build();
 
@@ -49,8 +55,7 @@ builder.Services.AddScoped<Kernel>(sp =>
 
 // ================================================================
 // ---------- Additive services merged in from Document 2 ----------
-// (Nothing above this block was changed. These only ADD capability;
-//  they don't touch CORS, the DbContext, or the mandatory apiKey check.)
+// (These only ADD capability; they don't touch CORS or the DbContext.)
 // ================================================================
 
 builder.Services.AddControllers();
@@ -143,14 +148,18 @@ using (var scope = app.Services.CreateScope())
 
 // ---------- Vision chat client (for receipt image parsing) ----------
 
-var visionOpts = new OpenAIClientOptions
+IChatClient? visionChat = null;
+if (apiKey is not null)
 {
-    Endpoint = new Uri("https://generativelanguage.googleapis.com/v1beta/openai/")
-};
-var visionAi = new OpenAIClient(new ApiKeyCredential(apiKey), visionOpts);
-IChatClient visionChat = visionAi
-    .GetChatClient("gemini-2.5-flash")
-    .AsIChatClient();
+    var visionOpts = new OpenAIClientOptions
+    {
+        Endpoint = new Uri("https://generativelanguage.googleapis.com/v1beta/openai/")
+    };
+    var visionAi = new OpenAIClient(new ApiKeyCredential(apiKey), visionOpts);
+    visionChat = visionAi
+        .GetChatClient("gemini-2.5-flash")
+        .AsIChatClient();
+}
 
 // ---------- Helper: shared error handling for AI calls ----------
 
@@ -496,6 +505,9 @@ app.MapDelete("/api/pantry/{id:int}", async (int id, AppDbContext db) =>
 
 app.MapPost("/api/receipt/parse", async (HttpRequest req) =>
 {
+    if (visionChat is null)
+        return Results.Problem(detail: "AI belum dikonfigurasi (GoogleAI:ApiKey kosong).", statusCode: 503);
+
     var form = await req.ReadFormAsync();
     var file = form.Files["image"];
 
@@ -532,6 +544,9 @@ app.MapPost("/api/receipt/parse", async (HttpRequest req) =>
 
 app.MapPost("/api/detect", async (HttpRequest req) =>
 {
+    if (visionChat is null)
+        return Results.Problem(detail: "AI belum dikonfigurasi (GoogleAI:ApiKey kosong).", statusCode: 503);
+
     var form = await req.ReadFormAsync();
     var file = form.Files["image"];
 
@@ -711,5 +726,7 @@ record SavePreferencesRequest(int UserId, string Goal, string DietType, string A
 record PantryRequest(int UserId, string IngredientName, string Category, int Quantity, string Unit, DateTime ExpiryDate);
 record ParsedItem(string Name, string? Quantity, string? Unit);
 record MealCheckRequest(string Meal);
+record DetectedObject(string Label, double Confidence, int YMin, int XMin, int YMax, int XMax, string? Unit);
+record DetectionResult(List<DetectedObject> Objects, string Summary);
 record DetectedObject(string Label, double Confidence, int YMin, int XMin, int YMax, int XMax, string? Unit);
 record DetectionResult(List<DetectedObject> Objects, string Summary);
