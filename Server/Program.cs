@@ -56,7 +56,6 @@ builder.Services.AddScoped<Kernel>(sp =>
 builder.Services.AddControllers();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<UserStore>();
-builder.Services.AddSingleton<ContentStore>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
