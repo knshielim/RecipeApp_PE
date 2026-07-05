@@ -14,12 +14,12 @@ async function safeJson(res) {
 
 function TopBar({ username, role, onLogout }) {
   return (
-    <nav className="bg-white shadow-sm border-b border-slate-200">
+    <nav className="bg-white soft-shadow border-b border-slate-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-green-600">RecipeApp</h1>
-            <span className="text-xs font-semibold bg-green-50 text-green-600 px-3 py-1 rounded-full">
+            <h1 className="text-2xl font-bold text-brand">RecipeApp</h1>
+            <span className="text-xs font-semibold bg-brand-light text-brand px-3 py-1 rounded-full">
               {role}
             </span>
           </div>
@@ -203,7 +203,7 @@ function AdminPage({ token, username, onLogout }) {
     "focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 transition-all";
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface">
       <TopBar username={username} role="Admin" onLogout={onLogout} />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-5">

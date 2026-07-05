@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Server.Models;
 
 public class AppDbContext : DbContext
 {
@@ -8,4 +9,17 @@ public class AppDbContext : DbContext
     public DbSet<MealPlan> MealPlans => Set<MealPlan>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<Pantry> Pantries => Set<Pantry>();
+    public DbSet<User> Users => Set<User>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.HasKey(u => u.Username);
+            entity.Property(u => u.Username).HasMaxLength(100);
+            entity.Property(u => u.PasswordHash).IsRequired();
+            entity.Property(u => u.Role).IsRequired();
+            entity.Property(u => u.ProfilePicture).HasDefaultValue(string.Empty);
+        });
+    }
 }

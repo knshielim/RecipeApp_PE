@@ -60,7 +60,7 @@ builder.Services.AddScoped<Kernel>(sp =>
 
 builder.Services.AddControllers();
 builder.Services.AddSingleton<TokenService>();
-builder.Services.AddSingleton<UserStore>();
+builder.Services.AddScoped<UserStore>();
 builder.Services.AddScoped<IMealPlanSuggester, MealPlanSuggester>(); // Meal Planning module (Member 3)
 
 builder.Services
@@ -107,6 +107,25 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+
+    // Users table may be missing on databases created before auth persistence
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS Users (
+            Username TEXT NOT NULL PRIMARY KEY,
+            PasswordHash TEXT NOT NULL,
+            Role TEXT NOT NULL,
+            CreatedAt TEXT NOT NULL,
+            FullName TEXT NOT NULL,
+            Email TEXT NOT NULL,
+            PhoneNumber TEXT NOT NULL,
+            DateOfBirth TEXT NOT NULL,
+            Gender TEXT NOT NULL,
+            ProfilePicture TEXT NOT NULL DEFAULT ''
+        );
+        """);
+
+    UserStore.SeedDefaults(db);
+
     if (!db.Recipes.Any())
     {
         db.Recipes.Add(new Recipe

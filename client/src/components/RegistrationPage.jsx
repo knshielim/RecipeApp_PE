@@ -35,6 +35,7 @@ function RegistrationPage({ onGoToLogin }) {
           email,
           username,
           password,
+          role: "User",
           phoneNumber,
           dateOfBirth,
           gender,
@@ -58,16 +59,13 @@ function RegistrationPage({ onGoToLogin }) {
     }
   }
 
-  // Focus ring menggunakan warna brand RecipeApp (hijau)
-  const inputClass =
-    "w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm " +
-    "focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600";
+  const inputClass = "input-field w-full";
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-100 p-8 sm:p-10">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-surface">
+      <div className="w-full max-w-md soft-card soft-shadow p-8 sm:p-10">
         <div className="flex items-center gap-2.5 mb-8">
-          <span className="w-9 h-9 rounded-xl bg-green-600 text-white grid place-items-center font-bold text-lg">
+          <span className="w-9 h-9 rounded-xl bg-brand text-white grid place-items-center font-bold text-lg">
             R
           </span>
           <span className="font-semibold text-lg text-slate-900 tracking-tight">
@@ -223,8 +221,7 @@ function RegistrationPage({ onGoToLogin }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg
-              font-semibold transition disabled:opacity-50"
+            className="w-full btn-primary py-3 disabled:opacity-50"
           >
             {loading ? "Creating account..." : "Create account"}
           </button>
@@ -234,7 +231,7 @@ function RegistrationPage({ onGoToLogin }) {
           Already registered?{" "}
           <button
             onClick={onGoToLogin}
-            className="text-green-600 font-semibold hover:text-green-700 hover:underline"
+            className="text-brand font-semibold hover:underline"
           >
             Sign in
           </button>

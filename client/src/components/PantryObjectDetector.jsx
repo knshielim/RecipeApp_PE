@@ -59,8 +59,8 @@ export default function PantryObjectDetector({ onAdded }) {
   }
 
   return (
-    <div className="w-full bg-slate-50 rounded-2xl border border-slate-200 p-4">
-      <h3 className="font-semibold text-[#203966] mb-3">📷 Detect Items from Photo</h3>
+    <div className="w-full bg-brand-light rounded-2xl p-4">
+      <h3 className="font-semibold text-brand mb-3">📷 Detect Items from Photo</h3>
       <p className="text-sm text-slate-500 mb-3">
         Snap a photo of your fridge or shelf and we'll spot what's there.
       </p>
@@ -98,7 +98,7 @@ export default function PantryObjectDetector({ onAdded }) {
       <button
         onClick={detect}
         disabled={!file || loading}
-        className="bg-[#203966] text-white px-4 py-2 rounded-xl disabled:opacity-50"
+        className="btn-primary text-sm disabled:opacity-50"
       >
         {loading ? "Detecting..." : "Detect Objects"}
       </button>

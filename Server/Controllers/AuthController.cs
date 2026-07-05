@@ -53,7 +53,11 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public IActionResult Login([FromBody] LoginRequestDTO request)
     {
-        if (!_users.Verify(request.Username, request.Password, out var user) || user is null)
+        var username = request.Username?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(request.Password))
+            return Unauthorized(new { message = "Invalid credentials." });
+
+        if (!_users.Verify(username, request.Password, out var user) || user is null)
             return Unauthorized(new { message = "Invalid credentials." });
 
         // The role chosen on the login page must match the account's actual role
@@ -89,7 +93,8 @@ public class AuthController : ControllerBase
             user.PhoneNumber,
             user.DateOfBirth,
             user.Gender,
-            user.CreatedAt
+            user.CreatedAt,
+            profilePicture = string.IsNullOrEmpty(user.ProfilePicture) ? null : user.ProfilePicture
         });
     }
 
@@ -118,6 +123,34 @@ public class AuthController : ControllerBase
         if (!ok) return NotFound(new { message = "User not found." });
 
         return Ok(new { message = "Profile updated successfully." });
+    }
+
+    // PUT api/auth/profile/picture -- update profile picture (data URL or clear with null/empty)
+    [Authorize]
+    [HttpPut("profile/picture")]
+    public IActionResult UpdateProfilePicture([FromBody] UpdateProfilePictureDTO dto)
+    {
+        var name = User.Identity?.Name;
+        if (name is null) return Unauthorized(new { message = "Not signed in." });
+
+        var picture = dto.ProfilePicture?.Trim();
+        if (!string.IsNullOrEmpty(picture))
+        {
+            if (!picture.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = "Profile picture must be a valid image." });
+
+            if (picture.Length > 600_000)
+                return BadRequest(new { message = "Profile picture is too large. Please use a smaller image." });
+        }
+
+        var ok = _users.UpdateProfilePicture(name, picture);
+        if (!ok) return NotFound(new { message = "User not found." });
+
+        return Ok(new
+        {
+            message = string.IsNullOrEmpty(picture) ? "Profile picture removed." : "Profile picture updated.",
+            profilePicture = string.IsNullOrEmpty(picture) ? null : picture
+        });
     }
 
     // GET api/auth/dashboard -- any authenticated user

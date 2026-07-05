@@ -40,7 +40,7 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
       const res = await fetch(`${API}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, role }),
+        body: JSON.stringify({ username: username.trim(), password, role }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? "Login failed.");
@@ -53,11 +53,10 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-      <div className="w-full max-w-4xl bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden grid md:grid-cols-[1.1fr_1.3fr]">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-surface">
+      <div className="w-full max-w-4xl soft-card soft-shadow overflow-hidden grid md:grid-cols-[1.1fr_1.3fr]">
 
-        {/* Brand panel — dashboard hero gradient */}
-        <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-10 flex flex-col justify-between relative overflow-hidden max-md:hidden">
+        <div className="bg-brand text-white p-10 flex flex-col justify-between relative overflow-hidden max-md:hidden">
           <div
             className="absolute inset-0 opacity-[0.07]"
             style={{
@@ -99,14 +98,14 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
                 role="radio"
                 aria-checked={role === r.id}
                 onClick={() => setRole(r.id)}
-                className={`text-left rounded-xl border-2 p-4 transition focus-visible:outline-none
+                className={`text-left rounded-2xl border-2 p-4 transition focus-visible:outline-none
                   ${role === r.id
-                    ? "border-green-600 bg-green-50"
+                    ? "border-brand bg-brand-light"
                     : "border-slate-200 hover:border-slate-300"}`}
               >
                 <span
                   className={`inline-grid place-items-center w-9 h-9 rounded-xl mb-2
-                    ${role === r.id ? "bg-green-600 text-white" : "bg-slate-100 text-slate-500"}`}
+                    ${role === r.id ? "bg-brand text-white" : "bg-slate-100 text-slate-500"}`}
                 >
                   {r.icon}
                 </span>
@@ -127,7 +126,7 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
-                className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
+                className="input-field w-full"
                 required
               />
             </div>
@@ -141,7 +140,7 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
-                className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
+                className="input-field w-full"
                 required
               />
             </div>
@@ -155,8 +154,7 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg
-                font-semibold transition-colors disabled:opacity-50 mt-2 shadow-sm"
+              className="w-full btn-primary py-3 disabled:opacity-50 mt-2"
             >
               {loading ? "Signing in..." : `Sign in as ${role}`}
             </button>
@@ -166,7 +164,7 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
             Don&apos;t have an account?{" "}
             <button
               onClick={onGoToRegister}
-              className="text-green-600 font-semibold hover:text-green-700 hover:underline"
+              className="text-brand font-semibold hover:underline"
             >
               Create account
             </button>

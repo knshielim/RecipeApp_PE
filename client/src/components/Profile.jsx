@@ -1,7 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import PantryScanner from './PantryScanner';
 import PantryObjectDetector from './PantryObjectDetector';
+import { getFavoriteMeals, removeFavoriteMeal } from '../utils/favoriteMeals';
+import { useUserProfile } from '../context/UserProfileContext';
+import UserAvatar from './UserAvatar';
+import { resizeImageFile } from '../utils/profilePicture';
 
 const API = "http://localhost:5237";
 const USER_ID = 1;
@@ -9,9 +13,14 @@ const USER_ID = 1;
 const CATEGORIES = ["Vegetables", "Proteins", "Dairy", "Grains", "Spices", "Fruits", "Oils", "Other"];
 
 export default function Profile({ token, username }) {
+  const { displayName, profile, updateProfilePicture } = useUserProfile();
+  const pictureInputRef = useRef(null);
+  const [pictureStatus, setPictureStatus] = useState({ type: '', msg: '' });
+  const [uploadingPicture, setUploadingPicture] = useState(false);
   const [pantryItems, setPantryItems] = useState([]);
   const [mealStats, setMealStats] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
+  const [dashboardStats, setDashboardStats] = useState({ totalRecipes: 0, totalMealPlans: 0 });
   const [loading, setLoading] = useState(true);
 
   // Account information state
@@ -33,12 +42,15 @@ export default function Profile({ token, username }) {
   });
   const [editingId, setEditingId] = useState(null);
   const [formError, setFormError] = useState('');
+  const [showPantryModal, setShowPantryModal] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showDetector, setShowDetector] = useState(false);
+  const [favoriteMeals, setFavoriteMeals] = useState([]);
 
   useEffect(() => {
     fetchProfileData();
     fetchAccount();
+    setFavoriteMeals(getFavoriteMeals(USER_ID));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -118,19 +130,22 @@ export default function Profile({ token, username }) {
 
   const fetchProfileData = async () => {
     try {
-      const [pantryRes, statsRes, activityRes] = await Promise.all([
+      const [pantryRes, statsRes, activityRes, dashStatsRes] = await Promise.all([
         fetch(`${API}/api/pantry/${USER_ID}`),
         fetch(`${API}/api/profile/meal-stats/${USER_ID}`),
-        fetch(`${API}/api/profile/recent-activity/${USER_ID}`)
+        fetch(`${API}/api/profile/recent-activity/${USER_ID}`),
+        fetch(`${API}/api/dashboard/stats/${USER_ID}`),
       ]);
 
       const pantryData = await pantryRes.json();
       const statsData = await statsRes.json();
       const activityData = await activityRes.json();
+      const dashStatsData = await dashStatsRes.json();
 
       setPantryItems(pantryData);
       setMealStats(statsData);
       setRecentActivity(activityData);
+      setDashboardStats(dashStatsData);
     } catch (error) {
       console.error('Error fetching profile data:', error);
     } finally {
@@ -197,10 +212,18 @@ export default function Profile({ token, username }) {
       setFormData({ ingredientName: '', category: 'Vegetables', quantity: 1, unit: '', expiryDate: '' });
       setEditingId(null);
       setFormError('');
+      setShowPantryModal(false);
       fetchProfileData();
     } catch (error) {
       setFormError(error.message || 'Failed to save item. Please try again.');
     }
+  };
+
+  const openAddModal = () => {
+    setFormData({ ingredientName: '', category: 'Vegetables', quantity: 1, unit: '', expiryDate: '' });
+    setEditingId(null);
+    setFormError('');
+    setShowPantryModal(true);
   };
 
   const handleEdit = (item) => {
@@ -213,7 +236,14 @@ export default function Profile({ token, username }) {
     });
     setEditingId(item.id);
     setFormError('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setShowPantryModal(true);
+  };
+
+  const closePantryModal = () => {
+    setShowPantryModal(false);
+    setEditingId(null);
+    setFormData({ ingredientName: '', category: 'Vegetables', quantity: 1, unit: '', expiryDate: '' });
+    setFormError('');
   };
 
   const handleDelete = async (id) => {
@@ -228,9 +258,48 @@ export default function Profile({ token, username }) {
   };
 
   const handleCancelEdit = () => {
-    setFormData({ ingredientName: '', category: 'Vegetables', quantity: 1, unit: '', expiryDate: '' });
-    setEditingId(null);
-    setFormError('');
+    closePantryModal();
+  };
+
+  const handleRemoveFavorite = (recipeId) => {
+    setFavoriteMeals(removeFavoriteMeal(USER_ID, recipeId));
+  };
+
+  const handlePicturePick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setUploadingPicture(true);
+    setPictureStatus({ type: '', msg: '' });
+    try {
+      const dataUrl = await resizeImageFile(file);
+      const result = await updateProfilePicture(dataUrl);
+      setPictureStatus({
+        type: result.localOnly ? 'warning' : 'success',
+        msg: result.message || 'Profile picture updated.',
+      });
+    } catch (error) {
+      setPictureStatus({ type: 'error', msg: error.message || 'Failed to update profile picture.' });
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
+  const handleRemovePicture = async () => {
+    setUploadingPicture(true);
+    setPictureStatus({ type: '', msg: '' });
+    try {
+      const result = await updateProfilePicture(null);
+      setPictureStatus({
+        type: result.localOnly ? 'warning' : 'success',
+        msg: result.message || 'Profile picture removed.',
+      });
+    } catch (error) {
+      setPictureStatus({ type: 'error', msg: error.message || 'Failed to remove profile picture.' });
+    } finally {
+      setUploadingPicture(false);
+    }
   };
 
   const formatDate = (dateString) => {
@@ -253,50 +322,91 @@ export default function Profile({ token, username }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-slate-600">Loading your profile...</div>
+      <div className="flex items-center justify-center py-24">
+        <div className="text-slate-500">Loading your profile...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Profile Header */}
-      <div className="bg-gradient-to-r from-green-600 to-green-700 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="flex items-center gap-6">
-            <div className="bg-white/20 backdrop-blur rounded-full w-28 h-28 flex items-center justify-center border-4 border-white/30">
-              <svg className="w-14 h-14 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-4xl font-bold mb-2">
-                {account?.fullName || username || 'My Profile'}
-              </h1>
-              {account && (
-                <p className="text-green-100 mb-1">
-                  @{account.username} · {account.role}
-                </p>
-              )}
-              <p className="text-green-100 text-lg">Manage your account, pantry and track your cooking journey</p>
-            </div>
+    <div className="max-w-6xl mx-auto">
+      {/* Profile header */}
+      <div className="flex items-center gap-5 mb-8">
+        <div className="relative shrink-0">
+          <UserAvatar size="lg" className="border-4 border-white shadow-md" />
+          <button
+            type="button"
+            onClick={() => pictureInputRef.current?.click()}
+            disabled={uploadingPicture}
+            title="Change profile picture"
+            className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-brand text-white flex items-center justify-center shadow-md hover:bg-brand-dark transition-colors disabled:opacity-50"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+              <path d="M4 7h3l2-2h6l2 2h3a2 2 0 012 2v9a2 2 0 01-2 2H4a2 2 0 01-2-2V9a2 2 0 012-2z" strokeLinejoin="round" />
+              <circle cx="12" cy="13" r="3" />
+            </svg>
+          </button>
+          <input
+            ref={pictureInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePicturePick}
+          />
+        </div>
+        <div>
+          <h1 className="section-title text-2xl">
+            {account?.fullName || displayName || 'My Profile'}
+          </h1>
+          {account && (
+            <p className="text-brand-muted text-sm mt-0.5">
+              @{account.username} · {account.role}
+            </p>
+          )}
+          <p className="text-slate-500 text-sm mt-1">Manage your account, pantry and track your cooking journey</p>
+          <div className="flex flex-wrap items-center gap-3 mt-3">
+            <button
+              type="button"
+              onClick={() => pictureInputRef.current?.click()}
+              disabled={uploadingPicture}
+              className="text-sm font-semibold text-brand hover:underline disabled:opacity-50"
+            >
+              {uploadingPicture ? 'Uploading...' : 'Change photo'}
+            </button>
+            <button
+              type="button"
+              onClick={handleRemovePicture}
+              disabled={uploadingPicture || !profile.profilePicture}
+              className="text-sm font-semibold text-slate-500 hover:text-red-600 disabled:opacity-50"
+            >
+              Remove photo
+            </button>
           </div>
+          {pictureStatus.msg && (
+            <p className={`text-sm mt-2 ${
+              pictureStatus.type === 'success'
+                ? 'text-brand'
+                : pictureStatus.type === 'warning'
+                  ? 'text-amber-700'
+                  : 'text-red-600'
+            }`}>
+              {pictureStatus.msg}
+            </p>
+          )}
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Account & Pantry Management */}
           <div className="lg:col-span-2 space-y-6">
             {/* Account Information */}
-            <div className="bg-white rounded-xl shadow-sm p-8 border border-slate-100">
+            <div className="soft-card p-6 sm:p-8">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-slate-900">Account Information</h2>
+                <h2 className="section-title">Account Information</h2>
                 {!editingAccount && (
                   <button
                     onClick={() => { setEditingAccount(true); setAccountStatus({ type: '', msg: '' }); }}
-                    className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm"
+                    className="btn-primary text-sm"
                   >
                     Edit Profile
                   </button>
@@ -362,7 +472,7 @@ export default function Profile({ token, username }) {
                         name="fullName"
                         value={accountForm.fullName}
                         onChange={handleAccountInput}
-                        className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
+                        className="input-field w-full"
                         placeholder="e.g., Alice Tan"
                         required
                       />
@@ -374,7 +484,7 @@ export default function Profile({ token, username }) {
                         name="email"
                         value={accountForm.email}
                         onChange={handleAccountInput}
-                        className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
+                        className="input-field w-full"
                         placeholder="you@example.com"
                         required
                       />
@@ -386,7 +496,7 @@ export default function Profile({ token, username }) {
                         name="phoneNumber"
                         value={accountForm.phoneNumber}
                         onChange={handleAccountInput}
-                        className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
+                        className="input-field w-full"
                         placeholder="08xxxxxxxxxx"
                       />
                     </div>
@@ -397,7 +507,7 @@ export default function Profile({ token, username }) {
                         name="dateOfBirth"
                         value={accountForm.dateOfBirth}
                         onChange={handleAccountInput}
-                        className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
+                        className="input-field w-full"
                       />
                     </div>
                     <div>
@@ -419,14 +529,14 @@ export default function Profile({ token, username }) {
                     <button
                       type="submit"
                       disabled={savingAccount}
-                      className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold shadow-sm hover:shadow-md disabled:opacity-50"
+                      className="btn-primary disabled:opacity-50"
                     >
                       {savingAccount ? 'Saving...' : 'Save Changes'}
                     </button>
                     <button
                       type="button"
                       onClick={handleAccountCancel}
-                      className="bg-slate-100 text-slate-700 px-8 py-3 rounded-lg hover:bg-slate-200 transition-colors font-semibold"
+                      className="bg-slate-100 text-slate-700 px-6 py-2.5 rounded-full hover:bg-slate-200 transition-colors font-semibold"
                     >
                       Cancel
                     </button>
@@ -435,113 +545,32 @@ export default function Profile({ token, username }) {
               )}
             </div>
 
-            {/* Add/Edit Item Form */}
-            <div className="bg-white rounded-xl shadow-sm p-8 border border-slate-100">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">
-                {editingId ? 'Edit Pantry Item' : 'Add to Pantry'}
-              </h2>
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Ingredient Name *</label>
-                    <input
-                      type="text"
-                      name="ingredientName"
-                      value={formData.ingredientName}
-                      onChange={handleInputChange}
-                      className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
-                      placeholder="e.g., Tomatoes"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Category *</label>
-                    <select
-                      name="category"
-                      value={formData.category}
-                      onChange={handleInputChange}
-                      className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
-                      required
-                    >
-                      {CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Quantity *</label>
-                    <input
-                      type="number"
-                      name="quantity"
-                      value={formData.quantity}
-                      onChange={handleInputChange}
-                      min="1"
-                      className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Unit</label>
-                    <input
-                      type="text"
-                      name="unit"
-                      value={formData.unit}
-                      onChange={handleInputChange}
-                      className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
-                      placeholder="e.g., kg, pieces, cups"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Expiry Date</label>
-                    <input
-                      type="date"
-                      name="expiryDate"
-                      value={formData.expiryDate}
-                      onChange={handleInputChange}
-                      className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all"
-                    />
-                  </div>
-                </div>
-                {formError && (
-                  <p className="text-red-500 text-sm font-medium bg-red-50 p-3 rounded-lg">{formError}</p>
-                )}
-                <div className="flex gap-4">
-                  <button
-                    type="submit"
-                    className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold shadow-sm hover:shadow-md"
-                  >
-                    {editingId ? 'Update Item' : 'Add Item'}
-                  </button>
-                  {editingId && (
-                    <button
-                      type="button"
-                      onClick={handleCancelEdit}
-                      className="bg-slate-100 text-slate-700 px-8 py-3 rounded-lg hover:bg-slate-200 transition-colors font-semibold"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
-
             {/* Pantry Items List */}
-            <div className="bg-white rounded-xl shadow-sm p-8 border border-slate-100">
+            <div className="soft-card p-6 sm:p-8">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-slate-900">My Pantry</h2>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-green-600 bg-green-50 px-4 py-2 rounded-full">{pantryItems.length} items</span>
+                <h2 className="section-title">My Pantry</h2>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <span className="text-sm font-semibold text-brand bg-brand-light px-3 sm:px-4 py-1.5 rounded-full">{pantryItems.length} items</span>
+                  <button
+                    onClick={openAddModal}
+                    title="Add pantry item"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark transition-colors shadow-sm"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-5 h-5">
+                      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                    </svg>
+                  </button>
                   <button
                     onClick={() => { setShowScanner((v) => !v); setShowDetector(false); }}
                     title="Scan a grocery receipt"
-                    className="w-10 h-10 flex items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm text-lg"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark transition-colors shadow-sm text-lg"
                   >
                     🧾
                   </button>
                   <button
                     onClick={() => { setShowDetector((v) => !v); setShowScanner(false); }}
                     title="Detect items from a photo"
-                    className="w-10 h-10 flex items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm text-lg"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark transition-colors shadow-sm text-lg"
                   >
                     📷
                   </button>
@@ -575,7 +604,7 @@ export default function Profile({ token, username }) {
                   {pantryItems.map((item) => (
                     <div
                       key={item.id}
-                      className={`border rounded-xl p-5 flex justify-between items-start transition-all hover:shadow-md ${
+                      className={`border rounded-2xl p-5 flex justify-between items-start transition-all hover:shadow-md ${
                         isExpired(item.expiryDate) ? 'border-red-300 bg-red-50' :
                         isExpiringSoon(item.expiryDate) ? 'border-yellow-300 bg-yellow-50' :
                         'border-slate-100 bg-white'
@@ -618,7 +647,71 @@ export default function Profile({ token, username }) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                   </svg>
                   <p className="text-lg font-semibold text-slate-600">Your pantry is empty</p>
-                  <p className="text-sm">Add ingredients to get started!</p>
+                  <p className="text-sm">Press the + button to add ingredients!</p>
+                </div>
+              )}
+            </div>
+
+            {/* Favorite Meals */}
+            <div className="soft-card p-6 sm:p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="section-title">Favourite Meals</h2>
+                <span className="text-sm font-semibold text-brand bg-brand-light px-3 sm:px-4 py-1.5 rounded-full">
+                  {favoriteMeals.length} saved
+                </span>
+              </div>
+
+              {favoriteMeals.length > 0 ? (
+                <div className="space-y-4">
+                  {favoriteMeals.map((meal) => (
+                    <div
+                      key={meal.id}
+                      className="border border-slate-100 rounded-2xl p-5 flex justify-between items-start bg-white hover:shadow-md transition-all"
+                    >
+                      <div className="flex gap-4 flex-1 min-w-0">
+                        <div className="w-14 h-14 shrink-0 rounded-xl bg-gradient-to-br from-orange-100 to-amber-200 flex items-center justify-center text-2xl">
+                          ❤️
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <h3 className="font-bold text-slate-900 text-lg">{meal.title}</h3>
+                            {meal.category && (
+                              <span className="text-xs font-semibold bg-brand-light text-brand px-3 py-1 rounded-full">
+                                {meal.category}
+                              </span>
+                            )}
+                          </div>
+                          {meal.ingredients && (
+                            <p className="text-sm text-slate-500 truncate">{meal.ingredients}</p>
+                          )}
+                          {meal.addedAt && (
+                            <p className="text-xs text-slate-400 mt-1">
+                              Saved {formatDate(meal.addedAt)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveFavorite(meal.id)}
+                        title="Remove from favourites"
+                        className="text-red-500 hover:text-red-700 font-semibold text-sm px-3 py-1 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10 text-slate-500">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-brand-light flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-8 h-8 text-brand">
+                      <path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <p className="text-lg font-semibold text-slate-600">No favourite meals yet</p>
+                  <p className="text-sm mt-1 max-w-sm mx-auto">
+                    Save meals you love from the Dashboard using the heart icon — they&apos;ll show up here.
+                  </p>
                 </div>
               )}
             </div>
@@ -627,8 +720,8 @@ export default function Profile({ token, username }) {
           {/* Right Column - Stats & Activity */}
           <div className="lg:col-span-1 space-y-6">
             {/* Meals Per Week Chart */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100">
-              <h2 className="text-xl font-bold text-slate-900 mb-4">Meals Planned</h2>
+            <div className="soft-card p-6">
+              <h2 className="section-title mb-4">Meals Planned</h2>
               {mealStats.length > 0 ? (
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={mealStats}>
@@ -655,8 +748,8 @@ export default function Profile({ token, username }) {
             </div>
 
             {/* Recent Activity Feed */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100">
-              <h2 className="text-xl font-bold text-slate-900 mb-4">Recent Activity</h2>
+            <div className="soft-card p-6">
+              <h2 className="section-title mb-4">Recent Activity</h2>
               {recentActivity.length > 0 ? (
                 <div className="space-y-4">
                   {recentActivity.map((activity, idx) => (
@@ -689,9 +782,17 @@ export default function Profile({ token, username }) {
             </div>
 
             {/* Quick Stats */}
-            <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-xl shadow-sm p-6 text-white">
+            <div className="soft-card p-6 bg-brand text-white">
               <h2 className="text-xl font-bold mb-5">Quick Stats</h2>
               <div className="space-y-4">
+                <div className="flex justify-between items-center pb-3 border-b border-white/20">
+                  <span className="text-green-100">Recipes Saved</span>
+                  <span className="font-bold text-2xl">{dashboardStats.totalRecipes}</span>
+                </div>
+                <div className="flex justify-between items-center pb-3 border-b border-white/20">
+                  <span className="text-green-100">Meals Planned</span>
+                  <span className="font-bold text-2xl">{dashboardStats.totalMealPlans}</span>
+                </div>
                 <div className="flex justify-between items-center pb-3 border-b border-white/20">
                   <span className="text-green-100">Pantry Items</span>
                   <span className="font-bold text-2xl">{pantryItems.length}</span>
@@ -708,7 +809,97 @@ export default function Profile({ token, username }) {
             </div>
           </div>
         </div>
-      </div>
+
+      {/* Add / Edit Pantry Modal */}
+      {showPantryModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="soft-card p-6 sm:p-8 w-full max-w-md">
+            <h2 className="section-title text-xl mb-5">
+              {editingId ? 'Edit Pantry Item' : 'Add to Pantry'}
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Name *</label>
+                <input
+                  type="text"
+                  name="ingredientName"
+                  value={formData.ingredientName}
+                  onChange={handleInputChange}
+                  className="input-field w-full"
+                  placeholder="e.g., Rice, Eggs, Soy Sauce"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Category *</label>
+                <select
+                  name="category"
+                  value={formData.category}
+                  onChange={handleInputChange}
+                  className="input-field w-full"
+                  required
+                >
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Quantity *</label>
+                <input
+                  type="number"
+                  name="quantity"
+                  value={formData.quantity}
+                  onChange={handleInputChange}
+                  min="1"
+                  className="input-field w-full"
+                  required
+                />
+              </div>
+              {!editingId && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Unit</label>
+                    <input
+                      type="text"
+                      name="unit"
+                      value={formData.unit}
+                      onChange={handleInputChange}
+                      className="input-field w-full"
+                      placeholder="e.g., kg, pieces, cups"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Expiry Date</label>
+                    <input
+                      type="date"
+                      name="expiryDate"
+                      value={formData.expiryDate}
+                      onChange={handleInputChange}
+                      className="input-field w-full"
+                    />
+                  </div>
+                </>
+              )}
+              {formError && (
+                <p className="text-red-500 text-sm font-medium bg-red-50 p-3 rounded-xl">{formError}</p>
+              )}
+              <div className="flex gap-3 pt-2">
+                <button type="submit" className="flex-1 btn-primary">
+                  {editingId ? 'Save Changes' : 'Add Item'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="bg-slate-100 text-slate-700 px-5 py-2.5 rounded-full hover:bg-slate-200 transition-colors font-semibold text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

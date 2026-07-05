@@ -110,23 +110,22 @@ export default function AIAssistantChat() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col items-center p-4">
-      {/* Preferences Form */}
+    <div className="max-w-2xl mx-auto space-y-5">
+      <div>
+        <h1 className="section-title text-2xl">Recipe AI Assistant</h1>
+        <p className="text-slate-500 text-sm mt-1">Get personalized meal suggestions and planning help.</p>
+      </div>
+
       <PreferencesForm />
 
-      {/* Chat Card */}
-      <div className="w-full max-w-xl flex flex-col bg-white rounded-2xl shadow mt-4">
-        <h1 className="bg-[#203966] text-white font-bold text-lg rounded-t-2xl px-4 py-3">
-          Recipe AI Assistant
-        </h1>
-
-        <div className="flex-1 p-4 space-y-2 overflow-y-auto h-96">
+      <div className="soft-card flex flex-col overflow-hidden">
+        <div className="flex-1 p-5 space-y-3 overflow-y-auto max-h-[420px] min-h-[320px]">
           {messages.map((m, i) => (
             <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
               <span
-                className={`inline-block px-3 py-2 rounded-2xl max-w-[80%] whitespace-pre-wrap ${
+                className={`inline-block px-4 py-2.5 rounded-2xl max-w-[85%] whitespace-pre-wrap text-sm leading-relaxed ${
                   m.role === "user"
-                    ? "bg-blue-600 text-white"
+                    ? "bg-brand text-white"
                     : "bg-slate-100 text-slate-800"
                 }`}
               >
@@ -137,7 +136,7 @@ export default function AIAssistantChat() {
 
           {loading && (
             <div className="text-left">
-              <span className="inline-block px-3 py-2 rounded-2xl bg-slate-100 text-slate-500 italic">
+              <span className="inline-block px-4 py-2.5 rounded-2xl bg-slate-100 text-slate-500 italic text-sm">
                 Thinking...
               </span>
             </div>
@@ -145,95 +144,69 @@ export default function AIAssistantChat() {
           <div ref={chatEndRef} />
         </div>
 
-        <div className="flex gap-2 px-3 pt-2 flex-wrap">
-          <button
-            onClick={() =>
-              callQuickAction("/api/ai/suggest-meal", "Suggest a meal for me")
-            }
-            disabled={loading}
-            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full disabled:opacity-50"
-          >
-            🍽️ Suggest a meal
-          </button>
-
-          <button
-            onClick={() =>
-              callQuickAction("/api/ai/summarize-recipes", "Summarize my recipes")
-            }
-            disabled={loading}
-            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full disabled:opacity-50"
-          >
-            📋 Summarize my recipes
-          </button>
-
-          <button
-            onClick={() =>
-              callQuickAction("/api/ai/weekly-plan", "Generate my weekly meal plan")
-            }
-            disabled={loading}
-            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full disabled:opacity-50"
-          >
-            📅 Generate weekly plan
-          </button>
-
-          <button
-            onClick={() =>
-              callQuickAction("/api/ai/what-can-i-make", "What can I make with my pantry?")
-            }
-            disabled={loading}
-            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full disabled:opacity-50"
-          >
-            🍳 What can I make?
-          </button>
-
+        <div className="flex gap-2 px-4 pt-3 flex-wrap border-t border-slate-100">
+          {[
+            { label: "🍽️ Suggest a meal", path: "/api/ai/suggest-meal", text: "Suggest a meal for me" },
+            { label: "📋 Summarize recipes", path: "/api/ai/summarize-recipes", text: "Summarize my recipes" },
+            { label: "📅 Weekly plan", path: "/api/ai/weekly-plan", text: "Generate my weekly meal plan" },
+            { label: "🍳 What can I make?", path: "/api/ai/what-can-i-make", text: "What can I make with my pantry?" },
+          ].map((action) => (
+            <button
+              key={action.path}
+              onClick={() => callQuickAction(action.path, action.text)}
+              disabled={loading}
+              className="text-xs bg-brand-light text-brand hover:bg-brand/10 px-3 py-1.5 rounded-full disabled:opacity-50 font-medium transition-colors"
+            >
+              {action.label}
+            </button>
+          ))}
           <button
             onClick={() => setShowMealCheck((prev) => !prev)}
             disabled={loading}
-            className="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full disabled:opacity-50"
+            className="text-xs bg-brand-light text-brand hover:bg-brand/10 px-3 py-1.5 rounded-full disabled:opacity-50 font-medium transition-colors"
           >
-            🥘 Do I have enough for a meal?
+            🥘 Check ingredients
           </button>
         </div>
 
         {showMealCheck && (
-          <div className="flex gap-2 px-3 pb-2">
+          <div className="flex gap-2 px-4 pb-2">
             <input
               value={mealCheckInput}
               onChange={(e) => setMealCheckInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && checkMealIngredients()}
               placeholder="e.g. spaghetti carbonara"
-              className="flex-1 border rounded-xl px-3 py-2 text-sm"
+              className="input-soft flex-1 text-sm"
               autoFocus
             />
             <button
               onClick={checkMealIngredients}
               disabled={!mealCheckInput.trim() || loading}
-              className="bg-[#203966] text-white px-4 rounded-xl disabled:opacity-50 text-sm"
+              className="btn-primary text-sm disabled:opacity-50"
             >
               Check
             </button>
           </div>
         )}
 
-        <div className="flex gap-2 p-3 border-t">
+        <div className="flex gap-2 p-4 border-t border-slate-100">
           <input
             value={input}
-            className="flex-1 border rounded-xl px-3 py-2"
+            className="input-soft flex-1 text-sm"
             placeholder="Ask about your recipes or meal plan..."
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
             disabled={loading}
           />
-
           <button
             onClick={send}
             disabled={loading}
-            className="bg-[#203966] text-white px-4 rounded-xl disabled:opacity-50"
+            className="btn-primary disabled:opacity-50"
           >
             Send
           </button>
         </div>
       </div>
     </div>
-  );  
+  );
 }

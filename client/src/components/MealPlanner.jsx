@@ -145,45 +145,41 @@ export default function MealPlanner() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading your meal planner...</div>
+      <div className="flex items-center justify-center py-24">
+        <div className="text-slate-500">Loading your meal planner...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Hero section */}
-      <div className="bg-gradient-to-r from-green-600 to-green-700 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <h1 className="text-4xl font-bold mb-2">Weekly Meal Planner</h1>
-          <p className="text-green-100 text-lg">
-            Assign your saved recipes to each day of the week, then generate your grocery list.
-          </p>
-        </div>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div>
+        <h1 className="section-title text-2xl">Weekly Meal Planner</h1>
+        <p className="text-slate-500 text-sm mt-1">
+          Assign your saved recipes to each day of the week, then generate your grocery list.
+        </p>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {recipes.length === 0 && (
-          <div className="bg-white rounded-xl shadow-sm p-8 border border-slate-100">
-            <p className="text-sm text-slate-500">
-              You have no saved recipes yet. Add some recipes first to start planning meals.
-            </p>
-          </div>
-        )}
+      {recipes.length === 0 && (
+        <div className="soft-card p-8">
+          <p className="text-sm text-slate-500">
+            You have no saved recipes yet. Add some recipes first to start planning meals.
+          </p>
+        </div>
+      )}
 
-        {/* Weekly grid */}
-        <div className="bg-white rounded-xl shadow-sm p-8 border border-slate-100 overflow-x-auto">
-          <div className="flex justify-between items-center mb-5">
-            <h2 className="text-xl font-bold text-slate-800">This Week</h2>
-            <button
-              onClick={() => setConfirmGenerate(true)}
-              disabled={generating || recipes.length === 0}
-              className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm disabled:opacity-50"
-            >
-              {generating ? "Generating..." : "Auto-generate week"}
-            </button>
-          </div>
+      {/* Weekly grid */}
+      <div className="soft-card p-6 sm:p-8 overflow-x-auto">
+        <div className="flex justify-between items-center mb-5">
+          <h2 className="section-title">This Week</h2>
+          <button
+            onClick={() => setConfirmGenerate(true)}
+            disabled={generating || recipes.length === 0}
+            className="btn-primary text-sm disabled:opacity-50"
+          >
+            {generating ? "Generating..." : "Auto-generate week"}
+          </button>
+        </div>
 
           {generateError && (
             <p className="text-sm font-medium p-3 rounded-lg mb-5 text-red-600 bg-red-50 border border-red-100">
@@ -213,7 +209,7 @@ export default function MealPlanner() {
                         {plan ? (
                           <button
                             onClick={() => openForm(day, slot)}
-                            className="w-full text-left px-4 py-3 rounded-lg bg-green-50 border border-green-100 text-slate-700 hover:bg-green-100 transition-colors"
+                            className="w-full text-left px-4 py-3 rounded-2xl bg-brand-light border border-brand/10 text-slate-700 hover:bg-brand/10 transition-colors"
                           >
                             <span className="block font-semibold">{plan.recipeTitle}</span>
                             <span className="block text-xs text-slate-500">{plan.recipeCategory}</span>
@@ -222,7 +218,7 @@ export default function MealPlanner() {
                           <button
                             onClick={() => openForm(day, slot)}
                             disabled={recipes.length === 0}
-                            className="w-full px-4 py-3 rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-green-600 hover:text-green-600 transition-colors disabled:opacity-50"
+                            className="w-full px-4 py-3 rounded-2xl border border-dashed border-slate-300 text-slate-400 hover:border-brand hover:text-brand transition-colors disabled:opacity-50"
                           >
                             + Add
                           </button>
@@ -236,14 +232,13 @@ export default function MealPlanner() {
           </table>
         </div>
 
-        {/* Grocery list */}
-        <GroceryList />
-      </div>
+      {/* Grocery list */}
+      <GroceryList />
 
       {/* Auto-generate confirmation */}
       {confirmGenerate && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-8 w-full max-w-md">
+          <div className="soft-card p-8 w-full max-w-md">
             <h2 className="text-xl font-bold text-slate-800 mb-2">Auto-generate week</h2>
             <p className="text-sm text-slate-500 mb-5">
               This will replace your current weekly plan with one generated from your saved
@@ -252,13 +247,13 @@ export default function MealPlanner() {
             <div className="flex gap-2">
               <button
                 onClick={handleAutoGenerate}
-                className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm"
+                className="flex-1 btn-primary text-sm"
               >
                 Generate
               </button>
               <button
                 onClick={() => setConfirmGenerate(false)}
-                className="bg-slate-100 text-slate-700 px-5 py-2 rounded-lg hover:bg-slate-200 transition-colors font-semibold text-sm"
+                className="bg-slate-100 text-slate-700 px-5 py-2 rounded-full hover:bg-slate-200 transition-colors font-semibold text-sm"
               >
                 Cancel
               </button>
@@ -270,7 +265,7 @@ export default function MealPlanner() {
       {/* Add/Edit modal */}
       {form && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-8 w-full max-w-md">
+          <div className="soft-card p-8 w-full max-w-md">
             <h2 className="text-xl font-bold text-slate-800 mb-5">
               {form.planId ? "Edit meal" : "Add meal"}
             </h2>
@@ -281,7 +276,7 @@ export default function MealPlanner() {
                 <select
                   value={form.day}
                   onChange={(e) => setForm({ ...form, day: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all bg-white"
+                  className="input-field w-full"
                 >
                   {DAYS.map((d) => (
                     <option key={d} value={d}>{d}</option>
@@ -294,7 +289,7 @@ export default function MealPlanner() {
                 <select
                   value={form.mealSlot}
                   onChange={(e) => setForm({ ...form, mealSlot: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all bg-white capitalize"
+                  className="input-field w-full capitalize"
                 >
                   {SLOTS.map((s) => (
                     <option key={s} value={s}>{s}</option>
@@ -307,7 +302,7 @@ export default function MealPlanner() {
                 <select
                   value={form.recipeId}
                   onChange={(e) => setForm({ ...form, recipeId: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all bg-white"
+                  className="input-field w-full"
                 >
                   <option value="">Choose a recipe</option>
                   {recipes.map((r) => (
@@ -329,7 +324,7 @@ export default function MealPlanner() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm disabled:opacity-50"
+                className="flex-1 btn-primary text-sm disabled:opacity-50"
               >
                 {saving ? "Saving..." : "Save"}
               </button>
@@ -337,7 +332,7 @@ export default function MealPlanner() {
                 <button
                   onClick={handleDelete}
                   disabled={saving}
-                  className="bg-red-600 text-white px-5 py-2 rounded-lg hover:bg-red-700 transition-colors font-semibold text-sm disabled:opacity-50"
+                  className="bg-red-500 text-white px-5 py-2 rounded-full hover:bg-red-600 transition-colors font-semibold text-sm disabled:opacity-50"
                 >
                   Remove
                 </button>
@@ -345,7 +340,7 @@ export default function MealPlanner() {
               <button
                 onClick={closeForm}
                 disabled={saving}
-                className="bg-slate-100 text-slate-700 px-5 py-2 rounded-lg hover:bg-slate-200 transition-colors font-semibold text-sm"
+                className="bg-slate-100 text-slate-700 px-5 py-2 rounded-full hover:bg-slate-200 transition-colors font-semibold text-sm"
               >
                 Cancel
               </button>

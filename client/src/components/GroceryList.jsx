@@ -29,8 +29,6 @@ export default function GroceryList() {
     setChecked((prev) => ({ ...prev, [name]: !prev[name] }));
   }
 
-  // "200 g rice" style entries show summed quantity + unit;
-  // plain entries show an occurrence count when mentioned more than once.
   function formatAmount(item) {
     if (item.unit) return `${item.quantity} ${item.unit}`;
     if (item.occurrences > 1) return `x${item.occurrences}`;
@@ -38,20 +36,20 @@ export default function GroceryList() {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm p-8 border border-slate-100">
+    <div className="soft-card p-6 sm:p-8">
       <div className="flex justify-between items-center mb-5">
-        <h2 className="text-xl font-bold text-slate-800">Grocery List</h2>
+        <h2 className="section-title">Grocery List</h2>
         <button
           onClick={generateList}
           disabled={loading}
-          className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm disabled:opacity-50"
+          className="btn-primary text-sm disabled:opacity-50"
         >
           {loading ? "Generating..." : items ? "Regenerate" : "Generate from plan"}
         </button>
       </div>
 
       {error && (
-        <p className="text-sm font-medium p-3 rounded-lg mb-5 text-red-600 bg-red-50 border border-red-100">
+        <p className="text-sm font-medium p-3 rounded-xl mb-5 text-red-600 bg-red-50 border border-red-100">
           {error}
         </p>
       )}
@@ -73,7 +71,7 @@ export default function GroceryList() {
             {items.map((item) => (
               <li
                 key={`${item.name}-${item.unit}`}
-                className="flex justify-between items-center text-sm px-2 py-1 rounded-lg hover:bg-green-50 cursor-pointer transition-colors"
+                className="flex justify-between items-center text-sm px-3 py-2 rounded-xl hover:bg-brand-light cursor-pointer transition-colors"
                 onClick={() => toggleItem(item.name)}
               >
                 <span className={`capitalize ${checked[item.name] ? "line-through text-slate-300" : "text-slate-700"}`}>

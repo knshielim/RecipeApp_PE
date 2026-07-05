@@ -76,8 +76,8 @@ export default function PantryScanner({ onAdded }) {
   }
 
   return (
-    <div className="w-full bg-slate-50 rounded-2xl border border-slate-200 p-4">
-      <h3 className="font-semibold text-[#203966] mb-3">🧾 Scan Grocery Receipt</h3>
+    <div className="w-full bg-brand-light rounded-2xl p-4">
+      <h3 className="font-semibold text-brand mb-3">🧾 Scan Grocery Receipt</h3>
 
       <input
         type="file"
@@ -97,7 +97,7 @@ export default function PantryScanner({ onAdded }) {
       <button
         onClick={parseReceipt}
         disabled={!file || parsing}
-        className="bg-[#203966] text-white px-4 py-2 rounded-xl disabled:opacity-50 mb-3"
+        className="btn-primary text-sm disabled:opacity-50 mb-3"
       >
         {parsing ? "Reading receipt..." : "Read Receipt"}
       </button>
@@ -114,7 +114,7 @@ export default function PantryScanner({ onAdded }) {
                   type="checkbox"
                   checked={item.selected}
                   onChange={() => toggleItem(i)}
-                  className="accent-[#203966]"
+                  className="accent-brand"
                 />
                 <span className="flex-1 text-sm capitalize">{item.name}</span>
                 <input
