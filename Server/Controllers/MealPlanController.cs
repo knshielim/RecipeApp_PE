@@ -52,7 +52,7 @@ public class MealPlanController : ControllerBase
         var recipes = await _db.Recipes
             .Where(r => r.UserId == userId)
             .OrderBy(r => r.Title)
-            .Select(r => new { r.Id, r.Title, r.Category })
+            .Select(r => new { r.Id, r.Title, r.Category, r.ImageUrl })
             .ToListAsync();
 
         return Ok(recipes);
@@ -231,6 +231,50 @@ public class MealPlanController : ControllerBase
         return Ok(new { message = $"Generated a plan for {week.Count} meal slots.", slots = week.Count });
     }
 
+    // POST api/mealplans/{userId}/apply-plan
+    // Persists an exact weekly plan the user has already reviewed and
+    // approved — e.g. the preview shown by the AI assistant's "Generate
+    // weekly plan" action. Every entry is re-validated against this user's
+    // own saved recipes before anything is written, and this replaces
+    // whatever weekly plan the user already had.
+    [HttpPost("{userId:int}/apply-plan")]
+    public async Task<IActionResult> ApplyPlan(int userId, [FromBody] List<PlanEntryDTO> entries)
+    {
+        if (entries == null || entries.Count == 0)
+            return BadRequest(new { message = "No plan entries provided." });
+
+        var userRecipeIds = (await _db.Recipes
+            .Where(r => r.UserId == userId)
+            .Select(r => r.Id)
+            .ToListAsync())
+            .ToHashSet();
+
+        var seen = new HashSet<(string Day, string Slot)>();
+        var toSave = new List<MealPlan>();
+
+        foreach (var entry in entries)
+        {
+            var day = ValidDays.FirstOrDefault(d => d.Equals(entry.Day, StringComparison.OrdinalIgnoreCase));
+            var slot = ValidSlots.FirstOrDefault(s => s.Equals(entry.MealSlot, StringComparison.OrdinalIgnoreCase));
+            if (day == null || slot == null) continue;
+            if (!userRecipeIds.Contains(entry.RecipeId)) continue;
+            if (!seen.Add((day, slot))) continue; // first entry per slot wins
+
+            toSave.Add(new MealPlan { UserId = userId, Day = day, MealSlot = slot, RecipeId = entry.RecipeId });
+        }
+
+        if (toSave.Count == 0)
+            return BadRequest(new { message = "None of the plan entries were valid for this user." });
+
+        var existing = await _db.MealPlans.Where(m => m.UserId == userId).ToListAsync();
+        _db.MealPlans.RemoveRange(existing);
+        _db.MealPlans.AddRange(toSave);
+
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = $"Saved your weekly plan ({toSave.Count} meal slots).", slots = toSave.Count });
+    }
+
     // ---------- helpers ----------
 
     private async Task<IActionResult?> ValidateRequest(MealPlanRequestDTO request)
@@ -276,3 +320,4 @@ public class MealPlanController : ControllerBase
         public int Occurrences { get; set; }
     }
 }
+public record PlanEntryDTO(string Day, string MealSlot, int RecipeId);

@@ -14,7 +14,7 @@ using Server.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // ================================================================
-// ---------- Services (verbatim from Document 1 — untouched) ----------
+// ---------- Core services (CORS, DbContext, Kernel) ----------
 // ================================================================
 
 builder.Services.AddCors(o => o.AddDefaultPolicy(
@@ -23,7 +23,7 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite("Data Source=ai_assistant_dev.db"));
 
-// GoogleAI:ApiKey is now optional: without it the app still starts and
+// GoogleAI:ApiKey is optional: without it the app still starts and
 // login/non-AI features work fine. Only the AI/vision endpoints will
 // return a "not configured" response until a real key is added.
 string? apiKey = builder.Configuration["GoogleAI:ApiKey"];
@@ -54,13 +54,17 @@ builder.Services.AddScoped<Kernel>(sp =>
 });
 
 // ================================================================
-// ---------- Additive services merged in from Document 2 ----------
-// (These only ADD capability; they don't touch CORS or the DbContext.)
+// ---------- Auth / user / meal-planning services ----------
 // ================================================================
 
 builder.Services.AddControllers();
 builder.Services.AddSingleton<TokenService>();
+
+// NOTE: registered as Scoped (not Singleton) because UserStore reads/writes
+// via the scoped AppDbContext — a Singleton here would either throw at
+// resolution time or capture a stale/disposed DbContext across requests.
 builder.Services.AddScoped<UserStore>();
+
 builder.Services.AddScoped<IMealPlanSuggester, MealPlanSuggester>(); // Meal Planning module (Member 3)
 
 builder.Services
@@ -68,8 +72,7 @@ builder.Services
     .AddJwtBearer(options =>
     {
         // Guarded: if Server:Key isn't configured yet, JWT auth is simply
-        // inert instead of crashing the app at startup (Document 2's
-        // version used `!` and would throw NullReferenceException here).
+        // inert instead of crashing the app at startup.
         var key = builder.Configuration["Server:Key"];
         if (!string.IsNullOrWhiteSpace(key))
         {
@@ -97,32 +100,24 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 app.UseCors();
 
-// Additive: enables [Authorize] controllers/endpoints if/when you add them.
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// seed some test data so the AI has something to read (verbatim, Document 1)
+// ---------- DB setup + seed data ----------
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
 
-    // Users table may be missing on databases created before auth persistence
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS Users (
-            Username TEXT NOT NULL PRIMARY KEY,
-            PasswordHash TEXT NOT NULL,
-            Role TEXT NOT NULL,
-            CreatedAt TEXT NOT NULL,
-            FullName TEXT NOT NULL,
-            Email TEXT NOT NULL,
-            PhoneNumber TEXT NOT NULL,
-            DateOfBirth TEXT NOT NULL,
-            Gender TEXT NOT NULL,
-            ProfilePicture TEXT NOT NULL DEFAULT ''
-        );
-        """);
+    // Migrate() applies any pending EF Core migrations (creating the database
+    // and all tables/columns on first run, and evolving the schema on later
+    // runs). This replaces EnsureCreated() + the hand-written CREATE TABLE /
+    // ALTER TABLE patches below, which only ever worked for the one column
+    // they were written for and silently drifted from the model otherwise.
+    // See Migrations/ for the schema history — run `dotnet ef migrations add
+    // <Name>` after changing any entity model, then `dotnet ef database
+    // update` (or just restart the app; Migrate() applies pending ones too).
+    db.Database.Migrate();
 
     UserStore.SeedDefaults(db);
 
@@ -138,9 +133,6 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
     }
 
-    // ---- Additive seed data merged from Document 2 ----
-    // Only runs if these tables are still empty; does not touch the
-    // Recipes seed block above.
     if (!db.MealPlans.Any())
     {
         var recipes = db.Recipes.Where(r => r.UserId == 1).ToList();
@@ -160,11 +152,6 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
     }
 }
-
-// ================================================================
-// Everything below this line is Document 1, completely unchanged:
-// vision client, HandleAiError, every /api/... endpoint, and records.
-// ================================================================
 
 // ---------- Vision chat client (for receipt image parsing) ----------
 
@@ -193,6 +180,50 @@ static IResult HandleAiError(Exception ex)
     }
 
     return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+}
+
+// Deterministic, non-AI comparison of one recipe's ingredient list against
+// the user's pantry — used by both "what can I make" and "am I missing
+// anything", so those features always reflect the same saved recipe data
+// rather than the AI's guess at what a dish "typically" needs.
+static (Recipe Recipe, double MatchRatio, List<string> Missing) AnalyseRecipeAgainstPantry(
+    Recipe recipe, List<string> pantryNames)
+{
+    var ingredients = recipe.Ingredients
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(i => i.Length > 0)
+        .ToList();
+
+    if (ingredients.Count == 0) return (recipe, 0, new List<string>());
+
+    var missing = ingredients
+        .Where(ingredient => !pantryNames.Any(p =>
+            ingredient.Contains(p, StringComparison.OrdinalIgnoreCase) ||
+            p.Contains(ingredient, StringComparison.OrdinalIgnoreCase)))
+        .ToList();
+
+    var ratio = (double)(ingredients.Count - missing.Count) / ingredients.Count;
+    return (recipe, ratio, missing);
+}
+
+// Extracts the first JSON object from a generated-recipe response (models
+// sometimes wrap it in prose or markdown fences).
+static GeneratedRecipe? ParseGeneratedRecipe(string content)
+{
+    var start = content.IndexOf('{');
+    var end = content.LastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+
+    try
+    {
+        var json = content.Substring(start, end - start + 1);
+        return System.Text.Json.JsonSerializer.Deserialize<GeneratedRecipe>(json,
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+    }
+    catch (System.Text.Json.JsonException)
+    {
+        return null;
+    }
 }
 
 // ---------- Endpoints ----------
@@ -310,30 +341,78 @@ app.MapPost("/api/ai/preferences", async (SavePreferencesRequest req, AppDbConte
 
 // ---------- Weekly Plan Generation ----------
 
-app.MapPost("/api/ai/weekly-plan", async (Kernel kernel) =>
+// Builds the week from ONLY the user's saved recipes, pre-filtered by their
+// stored allergies and diet type. The AI (when configured) is asked to pick a
+// tasty, varied arrangement of those already-allowed recipes; AutoPlanBuilder
+// then validates/repairs the result deterministically, so an invented recipe
+// or an off-diet/allergen recipe can never reach the reply — with or without
+// the AI available.
+app.MapPost("/api/ai/weekly-plan", async (AppDbContext db, IMealPlanSuggester suggester) =>
 {
     int userId = 1; // TODO: replace with real authenticated user id later
 
     try
     {
-        var chat = kernel.GetRequiredService<IChatCompletionService>();
-        var history = new ChatHistory();
-        history.AddSystemMessage(
-            $"You are a meal-planning assistant. The current user's id is {userId}. " +
-            $"First call get_user_preferences to check their goal, diet type, and allergies. " +
-            $"NEVER include any ingredient matching their listed allergies, even partially " +
-            $"(e.g. if 'peanuts' is an allergy, avoid peanut butter, peanut oil, etc). " +
-            $"Then call get_user_recipes to see what they have saved, and call " +
-            $"get_weekly_meal_plan to check for any existing plan. " +
-            $"Generate a full 7-day meal plan (breakfast, lunch, dinner) using their saved " +
-            $"recipes where possible, formatted as a clear day-by-day list. If their goal is " +
-            $"'bulking', favour higher-calorie/protein options; if 'cutting', favour lighter, " +
-            $"lower-calorie options.");
-        history.AddUserMessage("Generate a weekly meal plan for me.");
+        var recipes = await db.Recipes.Where(r => r.UserId == userId).ToListAsync();
+        if (recipes.Count == 0)
+        {
+            return Results.Ok(new
+            {
+                reply = "You don't have any saved recipes yet — add a few recipes first and I'll build your weekly plan from them."
+            });
+        }
 
-        var settings = new OpenAIPromptExecutionSettings { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
-        var result = await chat.GetChatMessageContentAsync(history, settings, kernel);
-        return Results.Ok(new { reply = result.Content });
+        var prefs = await db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
+
+        var allowedRecipes = AutoPlanBuilder.FilterByDietType(
+            AutoPlanBuilder.FilterAllergens(recipes, prefs), prefs);
+
+        if (allowedRecipes.Count == 0)
+        {
+            return Results.Ok(new
+            {
+                reply = "None of your saved recipes fit your current diet type and allergies, so I can't build a plan. " +
+                        "Try saving some recipes that match your preferences, or update them above."
+            });
+        }
+
+        var aiSuggestions = await suggester.SuggestWeekAsync(allowedRecipes, prefs);
+        var week = AutoPlanBuilder.BuildWeek(allowedRecipes, prefs, aiSuggestions);
+
+        var recipeById = allowedRecipes.ToDictionary(r => r.Id);
+        var sb = new StringBuilder();
+        sb.AppendLine(
+            $"Here's your weekly meal plan, built only from your saved recipes " +
+            $"(goal: {prefs?.Goal ?? "maintain"}, diet: {prefs?.DietType ?? "none"}" +
+            $"{(string.IsNullOrWhiteSpace(prefs?.Allergies) ? "" : $", avoiding: {prefs!.Allergies}")}). " +
+            $"If this looks good, hit \"Save this plan\" and it'll be added to your meal planner.");
+        sb.AppendLine();
+
+        foreach (var day in AutoPlanBuilder.Days)
+        {
+            sb.AppendLine($"**{day}**");
+            foreach (var slot in AutoPlanBuilder.Slots)
+            {
+                var entry = week.First(w => w.Day == day && w.MealSlot == slot);
+                var title = recipeById[entry.RecipeId].Title;
+                sb.AppendLine($"- {char.ToUpper(slot[0])}{slot[1..]}: {title}");
+            }
+            sb.AppendLine();
+        }
+
+        // Structured form of the exact same plan, so the client can send it
+        // straight to /api/mealplans/{userId}/apply-plan once the user
+        // confirms — no re-generation, no risk of saving something different
+        // from what was just previewed.
+        var planForClient = week.Select(w => new
+        {
+            day = w.Day,
+            mealSlot = w.MealSlot,
+            recipeId = w.RecipeId,
+            recipeTitle = recipeById[w.RecipeId].Title
+        }).ToList();
+
+        return Results.Ok(new { reply = sb.ToString().TrimEnd(), plan = planForClient });
     }
     catch (Microsoft.SemanticKernel.HttpOperationException ex) when (ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
     {
@@ -346,27 +425,50 @@ app.MapPost("/api/ai/weekly-plan", async (Kernel kernel) =>
 });
 
 // ---------- AI: What can I make with my pantry? ----------
+// Deterministic and grounded in the user's own saved recipes: no invented
+// dishes, ever. Ranks saved recipes (after allergy/diet filtering) by how
+// much of each recipe's ingredient list is already in the pantry.
 
-app.MapPost("/api/ai/what-can-i-make", async (Kernel kernel) =>
+app.MapPost("/api/ai/what-can-i-make", async (AppDbContext db) =>
 {
     try
     {
         int userId = 1; // TODO: replace with real user id
 
-        var chat = kernel.GetRequiredService<IChatCompletionService>();
-        var history = new ChatHistory();
-        history.AddSystemMessage(
-            $"You are a helpful cooking assistant. The current user's id is {userId}. " +
-            $"First call get_user_preferences to check their dietary goal and allergies — " +
-            $"NEVER suggest meals containing listed allergens. " +
-            $"Then call get_pantry_items to see what ingredients they currently have. " +
-            $"Suggest 3 meals they can make RIGHT NOW using only what's in their pantry. " +
-            $"For each meal, list which pantry ingredients it uses. Keep suggestions practical and simple.");
-        history.AddUserMessage("What can I make with my current ingredients?");
+        var recipes = await db.Recipes.Where(r => r.UserId == userId).ToListAsync();
+        if (recipes.Count == 0)
+            return Results.Ok(new { reply = "You don't have any saved recipes yet — add a few and I'll tell you what you can make." });
 
-        var settings = new OpenAIPromptExecutionSettings { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
-        var result = await chat.GetChatMessageContentAsync(history, settings, kernel);
-        return Results.Ok(new { reply = result.Content });
+        var prefs = await db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
+        var allowedRecipes = AutoPlanBuilder.FilterByDietType(AutoPlanBuilder.FilterAllergens(recipes, prefs), prefs);
+
+        var pantryNames = await db.Pantries.Where(p => p.UserId == userId).Select(p => p.IngredientName).ToListAsync();
+        if (pantryNames.Count == 0)
+            return Results.Ok(new { reply = "Your pantry is empty — add some ingredients and I'll tell you what you can make." });
+
+        var ranked = allowedRecipes
+            .Select(r => AnalyseRecipeAgainstPantry(r, pantryNames))
+            .OrderByDescending(x => x.MatchRatio)
+            .ThenBy(x => x.Missing.Count)
+            .Take(3)
+            .ToList();
+
+        var readyNow = ranked.Where(x => x.Missing.Count == 0).ToList();
+        var sb = new StringBuilder();
+
+        if (readyNow.Count > 0)
+        {
+            sb.AppendLine("You can make these right now from your saved recipes:");
+            foreach (var r in readyNow) sb.AppendLine($"- {r.Recipe.Title}");
+        }
+        else
+        {
+            sb.AppendLine("Nothing in your saved recipes is fully covered by your pantry yet — your closest matches are:");
+            foreach (var r in ranked)
+                sb.AppendLine($"- {r.Recipe.Title}: missing {string.Join(", ", r.Missing)}");
+        }
+
+        return Results.Ok(new { reply = sb.ToString().TrimEnd() });
     }
     catch (Exception ex)
     {
@@ -374,13 +476,60 @@ app.MapPost("/api/ai/what-can-i-make", async (Kernel kernel) =>
     }
 });
 
-// ---------- AI: Am I missing any ingredients for a specific meal? ----------
+// ---------- AI: Am I missing any ingredients for a specific saved recipe? ----------
+// Takes a recipeId (picked from a grid of the user's own recipes on the
+// client, not typed free-text) so this always checks their actual saved
+// ingredient list rather than the AI's guess at a generic dish.
 
-app.MapPost("/api/ai/missing-ingredients", async (MealCheckRequest req, Kernel kernel) =>
+app.MapPost("/api/ai/missing-ingredients", async (MealCheckRequest req, AppDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Meal))
-        return Results.BadRequest(new { error = "Please provide a meal name." });
+    if (req.RecipeId <= 0)
+        return Results.BadRequest(new { error = "Please pick one of your saved recipes." });
 
+    try
+    {
+        int userId = 1; // TODO: replace with real user id
+
+        var recipe = await db.Recipes.FirstOrDefaultAsync(r => r.Id == req.RecipeId && r.UserId == userId);
+        if (recipe == null)
+            return Results.BadRequest(new { error = "Recipe not found." });
+
+        var pantryNames = await db.Pantries.Where(p => p.UserId == userId).Select(p => p.IngredientName).ToListAsync();
+        var (_, _, missing) = AnalyseRecipeAgainstPantry(recipe, pantryNames);
+
+        var allIngredients = recipe.Ingredients
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        var have = allIngredients.Except(missing, StringComparer.OrdinalIgnoreCase).ToList();
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"**{recipe.Title}**");
+        sb.AppendLine();
+        sb.AppendLine("✅ Ingredients you have:");
+        sb.AppendLine(have.Count > 0 ? string.Join("\n", have.Select(i => $"- {i}")) : "- (none yet)");
+        sb.AppendLine();
+        sb.AppendLine("❌ Ingredients you still need to buy:");
+        sb.AppendLine(missing.Count > 0 ? string.Join("\n", missing.Select(i => $"- {i}")) : "- (none — you have it all!)");
+        sb.AppendLine();
+        sb.AppendLine(missing.Count == 0
+            ? "You can make this now! 🎉"
+            : $"You're missing {missing.Count} ingredient(s) — grab those and you're set.");
+
+        return Results.Ok(new { reply = sb.ToString().TrimEnd() });
+    }
+    catch (Exception ex)
+    {
+        return HandleAiError(ex);
+    }
+});
+
+// ---------- AI: Generate a brand-new recipe idea ----------
+// The one deliberate exception to "existing recipes only" — this is the
+// shortcut for when the user wants something new. NEVER used to answer
+// "what can I make" or the weekly plan; those stay grounded in saved recipes.
+
+app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest req, Kernel kernel) =>
+{
     try
     {
         int userId = 1; // TODO: replace with real user id
@@ -388,24 +537,63 @@ app.MapPost("/api/ai/missing-ingredients", async (MealCheckRequest req, Kernel k
         var chat = kernel.GetRequiredService<IChatCompletionService>();
         var history = new ChatHistory();
         history.AddSystemMessage(
-            $"You are a kitchen assistant. The current user's id is {userId}. " +
-            $"Call get_pantry_items to see what the user currently has. " +
-            $"The user wants to make: {req.Meal}. " +
-            $"List ALL ingredients typically needed to make this dish. " +
-            $"Then check each one against the pantry. " +
-            $"Clearly separate your response into two sections: " +
-            $"'✅ Ingredients you have' and '❌ Ingredients you still need to buy'. " +
-            $"At the end, give a one-sentence verdict on whether they can make it now or not.");
-        history.AddUserMessage($"Do I have everything I need to make {req.Meal}?");
+            $"You are a creative cooking assistant. The current user's id is {userId}. " +
+            $"First call get_user_preferences to check their goal, diet type, and allergies. " +
+            $"NEVER include any ingredient matching their listed allergies, even partially, and " +
+            $"respect their diet type (e.g. no meat for vegetarian, no meat/dairy/egg for vegan, " +
+            $"no pork/alcohol for halal). Invent ONE brand-new recipe" +
+            (string.IsNullOrWhiteSpace(req.Craving) ? "." : $" involving: {req.Craving}.") +
+            " Respond with ONLY a JSON object, no prose, no markdown fences, in the form: " +
+            "{\"title\":\"...\",\"category\":\"Breakfast|Lunch|Dinner|Snack\"," +
+            "\"ingredients\":\"comma, separated, list\",\"instructions\":\"numbered steps as one string\"}");
+        history.AddUserMessage(string.IsNullOrWhiteSpace(req.Craving)
+            ? "Surprise me with a new recipe."
+            : $"Come up with a new recipe using {req.Craving}.");
 
         var settings = new OpenAIPromptExecutionSettings { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
         var result = await chat.GetChatMessageContentAsync(history, settings, kernel);
-        return Results.Ok(new { reply = result.Content });
+
+        var parsed = ParseGeneratedRecipe(result.Content ?? "");
+        if (parsed == null)
+        {
+            return Results.Ok(new
+            {
+                reply = result.Content ?? "Sorry, I couldn't come up with a recipe that time — try again.",
+                recipe = (object?)null
+            });
+        }
+
+        var reply = $"**{parsed.Title}** ({parsed.Category})\n\nIngredients: {parsed.Ingredients}\n\nInstructions:\n{parsed.Instructions}";
+        return Results.Ok(new { reply, recipe = parsed });
     }
     catch (Exception ex)
     {
         return HandleAiError(ex);
     }
+});
+
+// ---------- Save a generated (or manually written) recipe ----------
+
+app.MapPost("/api/recipes", async (SaveRecipeRequest req, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Title) || string.IsNullOrWhiteSpace(req.Ingredients))
+        return Results.BadRequest(new { error = "Title and ingredients are required." });
+
+    int userId = 1; // TODO: replace with real user id
+
+    var recipe = new Recipe
+    {
+        UserId = userId,
+        Title = req.Title.Trim(),
+        Ingredients = req.Ingredients.Trim(),
+        Category = string.IsNullOrWhiteSpace(req.Category) ? "Uncategorized" : req.Category.Trim(),
+        ImageUrl = string.IsNullOrWhiteSpace(req.ImageUrl) ? "" : req.ImageUrl.Trim()
+    };
+
+    db.Recipes.Add(recipe);
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new { recipe.Id, recipe.Title, recipe.Category, recipe.ImageUrl });
 });
 
 // ---------- Dashboard Endpoints ----------
@@ -745,6 +933,9 @@ record ChatRequest(string Message);
 record SavePreferencesRequest(int UserId, string Goal, string DietType, string Allergies);
 record PantryRequest(int UserId, string IngredientName, string Category, int Quantity, string Unit, DateTime ExpiryDate);
 record ParsedItem(string Name, string? Quantity, string? Unit);
-record MealCheckRequest(string Meal);
+record MealCheckRequest(int RecipeId);
 record DetectedObject(string Label, double Confidence, int YMin, int XMin, int YMax, int XMax, string? Unit);
 record DetectionResult(List<DetectedObject> Objects, string Summary);
+record GenerateRecipeRequest(string? Craving);
+record GeneratedRecipe(string Title, string Category, string Ingredients, string Instructions);
+record SaveRecipeRequest(string Title, string Ingredients, string? Category, string? ImageUrl);

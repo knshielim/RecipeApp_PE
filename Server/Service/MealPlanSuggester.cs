@@ -95,7 +95,10 @@ public static class AutoPlanBuilder
         UserPreference? prefs,
         List<MealSlotSuggestion> aiSuggestions)
     {
-        var allowed = FilterAllergens(recipes, prefs);
+        // Only ever plan from the user's own saved recipes that also satisfy
+        // their allergies AND diet type — nothing outside this set can end up
+        // in the plan, no matter what the AI suggests.
+        var allowed = FilterByDietType(FilterAllergens(recipes, prefs), prefs);
         if (allowed.Count == 0) return new List<MealSlotSuggestion>();
 
         var allowedIds = allowed.Select(r => r.Id).ToHashSet();
@@ -167,4 +170,59 @@ public static class AutoPlanBuilder
         return ingredients.Contains(allergen, StringComparison.OrdinalIgnoreCase)
             || ingredients.Contains(singular, StringComparison.OrdinalIgnoreCase);
     }
+
+    // Removes recipes that don't fit the user's stored diet type. Uses the
+    // same case-insensitive substring approach as FilterAllergens, since
+    // Recipe has no structured diet tags — only a free-text ingredient list.
+    // Unrecognised or "none" diet types are not filtered at all.
+    public static List<Recipe> FilterByDietType(List<Recipe> recipes, UserPreference? prefs)
+    {
+        var diet = (prefs?.DietType ?? "none").Trim().ToLowerInvariant();
+
+        return diet switch
+        {
+            "vegan" => recipes
+                .Where(r => !ContainsAny(r.Ingredients, MeatKeywords)
+                         && !ContainsAny(r.Ingredients, AnimalProductKeywords))
+                .ToList(),
+            "vegetarian" => recipes
+                .Where(r => !ContainsAny(r.Ingredients, MeatKeywords))
+                .ToList(),
+            "pescatarian" => recipes
+                .Where(r => !ContainsAny(r.Ingredients, LandMeatKeywords))
+                .ToList(),
+            "halal" => recipes
+                .Where(r => !ContainsAny(r.Ingredients, NonHalalKeywords))
+                .ToList(),
+            _ => recipes.ToList(), // "none" or an unrecognised diet type
+        };
+    }
+
+    private static readonly string[] MeatKeywords =
+    {
+        "chicken", "beef", "pork", "bacon", "ham", "sausage", "lamb", "mutton", "turkey",
+        "duck", "veal", "venison", "fish", "salmon", "tuna", "shrimp", "prawn", "crab",
+        "lobster", "squid", "octopus", "anchovy", "sardine", "seafood", "meat"
+    };
+
+    // MeatKeywords minus seafood, since pescatarians do eat fish/shellfish.
+    private static readonly string[] LandMeatKeywords = MeatKeywords
+        .Where(k => k is not ("fish" or "salmon" or "tuna" or "shrimp" or "prawn" or "crab"
+                           or "lobster" or "squid" or "octopus" or "anchovy" or "sardine" or "seafood"))
+        .ToArray();
+
+    private static readonly string[] AnimalProductKeywords =
+    {
+        "milk", "cheese", "butter", "cream", "yogurt", "yoghurt", "egg", "honey", "ghee",
+        "mayonnaise", "gelatin", "whey", "casein"
+    };
+
+    private static readonly string[] NonHalalKeywords =
+    {
+        "pork", "bacon", "ham", "lard", "pepperoni", "prosciutto",
+        "wine", "beer", "alcohol", "rum", "sake", "brandy", "vodka", "gelatin"
+    };
+
+    private static bool ContainsAny(string ingredients, IEnumerable<string> keywords)
+        => keywords.Any(k => ingredients.Contains(k, StringComparison.OrdinalIgnoreCase));
 }
