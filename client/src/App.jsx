@@ -6,6 +6,7 @@ import Dashboard from "./components/Dashboard";
 import AdminPage from "./components/AdminPage";
 import Profile from "./components/Profile";
 import AIAssistantChat from "./components/AIAssistantChat";
+import MealPlanner from "./components/MealPlanner";
 import "./index.css";
 
 function LoginWrapper({ onLoginSuccess }) {
@@ -80,6 +81,7 @@ function App() {
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                   {[
                     { to: "/", label: "Dashboard", end: true },
+                    { to: "/meal-planner", label: "Meal Planner" },
                     { to: "/profile", label: "Profile" },
                     { to: "/ai-assistant", label: "AI Assistant" },
                   ].map((item) => (
@@ -125,6 +127,7 @@ function App() {
               />
             } 
           />
+          <Route path="/meal-planner" element={<MealPlanner />} />
           <Route path="/profile" element={<Profile token={auth.token} username={auth.username} />} />
           <Route path="/ai-assistant" element={<AIAssistantChat token={auth.token} />} />
           <Route path="*" element={<Navigate to="/" replace />} />

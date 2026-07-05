@@ -12,3 +12,8 @@
 # Environment
 .env
 .env.*
+
+# Local SQLite dev database
+*.db
+*.db-shm
+*.db-wal

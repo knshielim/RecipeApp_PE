@@ -61,6 +61,7 @@ builder.Services.AddScoped<Kernel>(sp =>
 builder.Services.AddControllers();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<UserStore>();
+builder.Services.AddScoped<IMealPlanSuggester, MealPlanSuggester>(); // Meal Planning module (Member 3)
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
