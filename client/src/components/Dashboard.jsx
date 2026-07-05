@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useSearch } from './layout/AppLayout';
 import { getFavoriteMeals, toggleFavoriteMeal } from '../utils/favoriteMeals';
+import { isSearchActive } from '../utils/search';
 import UserAvatar from './UserAvatar';
 import { useUserProfile } from '../context/UserProfileContext';
 
@@ -94,12 +95,12 @@ export default function Dashboard({ username }) {
 
   const filteredRecipes = useMemo(() => {
     let list = recentRecipes;
-    if (activeCategory) {
+    if (activeCategory && !isSearchActive(searchQuery)) {
       list = list.filter((r) =>
         r.category?.toLowerCase().includes(activeCategory.toLowerCase())
       );
     }
-    if (searchQuery.trim()) {
+    if (isSearchActive(searchQuery)) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
         (r) =>
@@ -110,6 +111,8 @@ export default function Dashboard({ username }) {
     }
     return list;
   }, [recentRecipes, activeCategory, searchQuery]);
+
+  const isSearching = isSearchActive(searchQuery);
 
   const handleToggleFavorite = (recipe) => {
     toggleFavoriteMeal(USER_ID, recipe);
@@ -167,6 +170,8 @@ export default function Dashboard({ username }) {
     <div className="flex gap-6 lg:gap-8">
       {/* Main column */}
       <div className="flex-1 min-w-0 space-y-8">
+        {!isSearching && (
+          <>
         {/* Overview: stat + charts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="soft-card px-5 py-5 flex flex-col justify-center">
@@ -254,10 +259,19 @@ export default function Dashboard({ username }) {
             ))}
           </div>
         </section>
+          </>
+        )}
 
         {/* Popular Recipes */}
         <section>
-          <h2 className="section-title mb-4">Popular Recipe</h2>
+          <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
+            <h2 className="section-title">{isSearching ? 'Search Results' : 'Popular Recipe'}</h2>
+            {isSearching && (
+              <p className="text-sm text-slate-500">
+                {filteredRecipes.length} result{filteredRecipes.length !== 1 ? 's' : ''} for &ldquo;{searchQuery.trim()}&rdquo;
+              </p>
+            )}
+          </div>
 
           {filteredRecipes.length > 0 ? (
             <div className="space-y-4">
@@ -312,18 +326,21 @@ export default function Dashboard({ username }) {
             <div className="soft-card p-10 text-center">
               <span className="text-5xl">🍳</span>
               <p className="text-slate-500 mt-4 mb-5">
-                {searchQuery || activeCategory
+                {isSearching || activeCategory
                   ? 'No recipes match your search.'
                   : 'No recipes saved yet'}
               </p>
+              {!isSearching && (
               <Link to="/ai-assistant" className="btn-primary inline-block text-sm">
                 Ask AI for Recipe Ideas
               </Link>
+              )}
             </div>
           )}
         </section>
 
-        {/* What you can do */}
+        {!isSearching && (
+        /* What you can do */
         <section>
           <h2 className="section-title mb-1">What can you do on our website?</h2>
           <p className="text-sm text-slate-500 mb-4">Here&apos;s a quick guide to everything RecipeApp offers.</p>
@@ -337,9 +354,11 @@ export default function Dashboard({ username }) {
             ))}
           </div>
         </section>
+        )}
       </div>
 
       {/* Events sidebar */}
+      {!isSearching && (
       <aside className="hidden xl:block w-72 shrink-0">
         <h2 className="section-title mb-4 leading-snug">
           Events you may be interested
@@ -391,6 +410,7 @@ export default function Dashboard({ username }) {
           </Link>
         </div>
       </aside>
+      )}
     </div>
   );
 }

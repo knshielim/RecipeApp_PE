@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { getGroceryList } from "../api/mealPlans";
+import { useSearch } from "./layout/AppLayout";
+import { matchesSearch, isSearchActive } from "../utils/search";
 
 const USER_ID = 1;
 
-export default function GroceryList() {
+export default function GroceryList({ onSearchResultsChange }) {
+  const { searchQuery } = useSearch();
   const [items, setItems] = useState(null);
   const [totalRecipes, setTotalRecipes] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -35,10 +38,32 @@ export default function GroceryList() {
     return "";
   }
 
+  const filteredItems = useMemo(() => {
+    if (!items) return [];
+    if (!isSearchActive(searchQuery)) return items;
+    return items.filter((item) => matchesSearch(searchQuery, item.name, item.unit));
+  }, [items, searchQuery]);
+
+  const isSearching = isSearchActive(searchQuery);
+
+  useEffect(() => {
+    if (!onSearchResultsChange) return;
+    if (!isSearching) {
+      onSearchResultsChange(true);
+      return;
+    }
+    onSearchResultsChange(Boolean(items && filteredItems.length > 0));
+  }, [isSearching, items, filteredItems.length, onSearchResultsChange]);
+
+  if (isSearching && (!items || filteredItems.length === 0)) {
+    return null;
+  }
+
   return (
     <div className="soft-card p-6 sm:p-8">
       <div className="flex justify-between items-center mb-5">
-        <h2 className="section-title">Grocery List</h2>
+        <h2 className="section-title">{isSearching ? 'Search Results' : 'Grocery List'}</h2>
+        {!isSearching && (
         <button
           onClick={generateList}
           disabled={loading}
@@ -46,6 +71,7 @@ export default function GroceryList() {
         >
           {loading ? "Generating..." : items ? "Regenerate" : "Generate from plan"}
         </button>
+        )}
       </div>
 
       {error && (
@@ -62,13 +88,24 @@ export default function GroceryList() {
         <p className="text-sm text-slate-500">
           Your meal plan is empty. Assign some recipes first.
         </p>
+      ) : filteredItems.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          No grocery items match &ldquo;{searchQuery.trim()}&rdquo;.
+        </p>
       ) : (
         <>
+          {!isSearching && (
           <p className="text-sm text-slate-500 mb-2">
             Aggregated from {totalRecipes} planned meal{totalRecipes !== 1 ? "s" : ""}.
           </p>
+          )}
+          {isSearching && (
+          <p className="text-sm text-brand mb-2">
+            {filteredItems.length} grocery item{filteredItems.length !== 1 ? "s" : ""} match &ldquo;{searchQuery.trim()}&rdquo;
+          </p>
+          )}
           <ul className="space-y-1 max-h-64 overflow-y-auto">
-            {items.map((item) => (
+            {filteredItems.map((item) => (
               <li
                 key={`${item.name}-${item.unit}`}
                 className="flex justify-between items-center text-sm px-3 py-2 rounded-xl hover:bg-brand-light cursor-pointer transition-colors"

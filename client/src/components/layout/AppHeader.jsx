@@ -1,24 +1,44 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import UserAvatar from "../UserAvatar";
 
+const SEARCH_PLACEHOLDERS = {
+  "/": "Search recipes by name, category, or ingredients…",
+  "/meal-planner": "Search planned meals by recipe name…",
+  "/profile": "Search pantry items or favourite meals…",
+};
+
 export default function AppHeader({ searchQuery, onSearchChange, username }) {
+  const { pathname } = useLocation();
+  const isAiPage = pathname === "/ai-assistant";
+  const placeholder = SEARCH_PLACEHOLDERS[pathname] || "Search…";
+  const hasSearchText = searchQuery.trim().length > 0;
+
   return (
     <header className="flex items-center gap-4 px-6 py-5 border-b border-slate-100/80">
-      <div className="flex-1 relative">
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search"
-          className="input-soft w-full pr-12 text-slate-600 placeholder:text-slate-400"
-        />
-        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-brand pointer-events-none">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-3-3" strokeLinecap="round" />
-          </svg>
-        </span>
-      </div>
+      {isAiPage ? (
+        <div className="flex-1" />
+      ) : (
+        <div className="flex-1 relative">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            className={`input-soft w-full text-slate-600 placeholder:text-slate-400 ${
+              hasSearchText ? "pr-4" : "pr-12"
+            }`}
+          />
+          {!hasSearchText && (
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-brand pointer-events-none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3-3" strokeLinecap="round" />
+              </svg>
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center gap-3 shrink-0">
         <Link

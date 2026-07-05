@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   getMealPlans,
   getRecipes,
@@ -8,6 +8,8 @@ import {
   autoGenerateWeek,
 } from "../api/mealPlans";
 import GroceryList from "./GroceryList";
+import { useSearch } from "./layout/AppLayout";
+import { matchesSearch, isSearchActive } from "../utils/search";
 
 const USER_ID = 1;
 
@@ -15,6 +17,7 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 const SLOTS = ["breakfast", "lunch", "dinner"];
 
 export default function MealPlanner() {
+  const { searchQuery } = useSearch();
   const [plans, setPlans] = useState([]);
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +31,7 @@ export default function MealPlanner() {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
   const [confirmGenerate, setConfirmGenerate] = useState(false);
+  const [searchHasGroceryResults, setSearchHasGroceryResults] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -53,6 +57,30 @@ export default function MealPlanner() {
   function findPlan(day, slot) {
     return plans.find((p) => p.day === day && p.mealSlot === slot);
   }
+
+  function planMatchesSearch(plan) {
+    if (!searchQuery.trim()) return true;
+    return matchesSearch(
+      searchQuery,
+      plan.recipeTitle,
+      plan.recipeCategory,
+      plan.day,
+      plan.mealSlot
+    );
+  }
+
+  const matchingPlanCount = useMemo(() => {
+    if (!isSearchActive(searchQuery)) return plans.length;
+    return plans.filter(planMatchesSearch).length;
+  }, [plans, searchQuery]);
+
+  const matchingPlans = useMemo(() => {
+    if (!isSearchActive(searchQuery)) return plans;
+    return plans.filter(planMatchesSearch);
+  }, [plans, searchQuery]);
+
+  const isSearching = isSearchActive(searchQuery);
+  const showPlannerSection = !isSearching || matchingPlans.length > 0;
 
   function openForm(day, slot) {
     const existing = findPlan(day, slot);
@@ -153,14 +181,16 @@ export default function MealPlanner() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {!isSearching && (
       <div>
         <h1 className="section-title text-2xl">Weekly Meal Planner</h1>
         <p className="text-slate-500 text-sm mt-1">
           Assign your saved recipes to each day of the week, then generate your grocery list.
         </p>
       </div>
+      )}
 
-      {recipes.length === 0 && (
+      {!isSearching && recipes.length === 0 && (
         <div className="soft-card p-8">
           <p className="text-sm text-slate-500">
             You have no saved recipes yet. Add some recipes first to start planning meals.
@@ -168,10 +198,12 @@ export default function MealPlanner() {
         </div>
       )}
 
-      {/* Weekly grid */}
+      {showPlannerSection && (
+      /* Weekly grid */
       <div className="soft-card p-6 sm:p-8 overflow-x-auto">
         <div className="flex justify-between items-center mb-5">
-          <h2 className="section-title">This Week</h2>
+          <h2 className="section-title">{isSearching ? 'Search Results' : 'This Week'}</h2>
+          {!isSearching && (
           <button
             onClick={() => setConfirmGenerate(true)}
             disabled={generating || recipes.length === 0}
@@ -179,14 +211,45 @@ export default function MealPlanner() {
           >
             {generating ? "Generating..." : "Auto-generate week"}
           </button>
+          )}
         </div>
 
-          {generateError && (
+        {isSearching && (
+          <p className="text-sm text-brand mb-5">
+            {matchingPlanCount} planned meal{matchingPlanCount !== 1 ? "s" : ""} match &ldquo;{searchQuery.trim()}&rdquo;
+          </p>
+        )}
+
+          {!isSearching && generateError && (
             <p className="text-sm font-medium p-3 rounded-lg mb-5 text-red-600 bg-red-50 border border-red-100">
               {generateError}
             </p>
           )}
 
+          {isSearching ? (
+            matchingPlans.length > 0 ? (
+              <div className="space-y-3">
+                {matchingPlans.map((plan) => (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    onClick={() => openForm(plan.day, plan.mealSlot)}
+                    className="w-full text-left px-4 py-3 rounded-2xl bg-brand-light border border-brand/10 text-slate-700 hover:bg-brand/10 transition-colors"
+                  >
+                    <span className="block font-semibold">{plan.recipeTitle}</span>
+                    <span className="block text-xs text-slate-500 capitalize">
+                      {plan.day} · {plan.mealSlot}
+                      {plan.recipeCategory ? ` · ${plan.recipeCategory}` : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 text-center py-8">
+                No planned meals match &ldquo;{searchQuery.trim()}&rdquo;.
+              </p>
+            )
+          ) : (
           <table className="w-full text-sm">
             <thead>
               <tr>
@@ -230,10 +293,19 @@ export default function MealPlanner() {
               ))}
             </tbody>
           </table>
+          )}
         </div>
+      )}
+
+      {isSearching && matchingPlans.length === 0 && !searchHasGroceryResults && (
+        <div className="soft-card p-10 text-center text-slate-500">
+          <p className="text-lg font-semibold text-slate-600">No results for &ldquo;{searchQuery.trim()}&rdquo;</p>
+          <p className="text-sm mt-1">Try a recipe name, day, meal slot, or grocery item.</p>
+        </div>
+      )}
 
       {/* Grocery list */}
-      <GroceryList />
+      <GroceryList onSearchResultsChange={setSearchHasGroceryResults} />
 
       {/* Auto-generate confirmation */}
       {confirmGenerate && (

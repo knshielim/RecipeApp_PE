@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import PantryScanner from './PantryScanner';
 import PantryObjectDetector from './PantryObjectDetector';
 import { getFavoriteMeals, removeFavoriteMeal } from '../utils/favoriteMeals';
 import { useUserProfile } from '../context/UserProfileContext';
+import { useSearch } from './layout/AppLayout';
+import { matchesSearch, isSearchActive } from '../utils/search';
 import UserAvatar from './UserAvatar';
 import { resizeImageFile } from '../utils/profilePicture';
 
@@ -14,6 +16,7 @@ const CATEGORIES = ["Vegetables", "Proteins", "Dairy", "Grains", "Spices", "Frui
 
 export default function Profile({ token, username }) {
   const { displayName, profile, updateProfilePicture } = useUserProfile();
+  const { searchQuery } = useSearch();
   const pictureInputRef = useRef(null);
   const [pictureStatus, setPictureStatus] = useState({ type: '', msg: '' });
   const [uploadingPicture, setUploadingPicture] = useState(false);
@@ -320,6 +323,24 @@ export default function Profile({ token, username }) {
     return new Date(dateString) < new Date();
   };
 
+  const filteredPantryItems = useMemo(() => {
+    if (!searchQuery.trim()) return pantryItems;
+    return pantryItems.filter((item) =>
+      matchesSearch(searchQuery, item.ingredientName, item.category, item.unit)
+    );
+  }, [pantryItems, searchQuery]);
+
+  const filteredFavoriteMeals = useMemo(() => {
+    if (!searchQuery.trim()) return favoriteMeals;
+    return favoriteMeals.filter((meal) =>
+      matchesSearch(searchQuery, meal.title, meal.category, meal.ingredients)
+    );
+  }, [favoriteMeals, searchQuery]);
+
+  const isSearching = isSearchActive(searchQuery);
+  const showPantrySection = !isSearching || filteredPantryItems.length > 0;
+  const showFavoritesSection = !isSearching || filteredFavoriteMeals.length > 0;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -330,7 +351,8 @@ export default function Profile({ token, username }) {
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* Profile header */}
+      {!isSearching && (
+      /* Profile header */
       <div className="flex items-center gap-5 mb-8">
         <div className="relative shrink-0">
           <UserAvatar size="lg" className="border-4 border-white shadow-md" />
@@ -395,11 +417,13 @@ export default function Profile({ token, username }) {
           )}
         </div>
       </div>
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={`grid grid-cols-1 ${isSearching ? '' : 'lg:grid-cols-3'} gap-6`}>
           {/* Left Column - Account & Pantry Management */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Account Information */}
+          <div className={`${isSearching ? '' : 'lg:col-span-2'} space-y-6`}>
+            {!isSearching && (
+            /* Account Information */
             <div className="soft-card p-6 sm:p-8">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="section-title">Account Information</h2>
@@ -544,12 +568,25 @@ export default function Profile({ token, username }) {
                 </form>
               )}
             </div>
+            )}
 
-            {/* Pantry Items List */}
+            {showPantrySection && (
+            /* Pantry Items List */
             <div className="soft-card p-6 sm:p-8">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="section-title">My Pantry</h2>
+                <h2 className="section-title">{isSearching ? 'Search Results — Pantry' : 'My Pantry'}</h2>
                 <div className="flex items-center gap-2 sm:gap-3">
+                  {isSearching ? (
+                    <span className="text-sm text-slate-500">
+                      {filteredPantryItems.length} match{filteredPantryItems.length !== 1 ? 'es' : ''}
+                    </span>
+                  ) : (
+                  <>
+                  {searchQuery.trim() && (
+                    <span className="text-xs text-slate-500 hidden sm:inline">
+                      {filteredPantryItems.length} match{filteredPantryItems.length !== 1 ? 'es' : ''}
+                    </span>
+                  )}
                   <span className="text-sm font-semibold text-brand bg-brand-light px-3 sm:px-4 py-1.5 rounded-full">{pantryItems.length} items</span>
                   <button
                     onClick={openAddModal}
@@ -574,10 +611,12 @@ export default function Profile({ token, username }) {
                   >
                     📷
                   </button>
+                  </>
+                  )}
                 </div>
               </div>
 
-              {showScanner && (
+              {!isSearching && showScanner && (
                 <div className="mb-6">
                   <PantryScanner
                     onAdded={() => {
@@ -588,7 +627,7 @@ export default function Profile({ token, username }) {
                 </div>
               )}
 
-              {showDetector && (
+              {!isSearching && showDetector && (
                 <div className="mb-6">
                   <PantryObjectDetector
                     onAdded={() => {
@@ -599,9 +638,9 @@ export default function Profile({ token, username }) {
                 </div>
               )}
 
-              {pantryItems.length > 0 ? (
+              {filteredPantryItems.length > 0 ? (
                 <div className="space-y-4">
-                  {pantryItems.map((item) => (
+                  {filteredPantryItems.map((item) => (
                     <div
                       key={item.id}
                       className={`border rounded-2xl p-5 flex justify-between items-start transition-all hover:shadow-md ${
@@ -641,6 +680,11 @@ export default function Profile({ token, username }) {
                     </div>
                   ))}
                 </div>
+              ) : pantryItems.length > 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <p className="text-lg font-semibold text-slate-600">No pantry items match your search</p>
+                  <p className="text-sm mt-1">Try a different ingredient or category name.</p>
+                </div>
               ) : (
                 <div className="text-center py-12 text-slate-500">
                   <svg className="w-20 h-20 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -651,19 +695,23 @@ export default function Profile({ token, username }) {
                 </div>
               )}
             </div>
+            )}
 
-            {/* Favorite Meals */}
+            {showFavoritesSection && (
+            /* Favorite Meals */
             <div className="soft-card p-6 sm:p-8">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="section-title">Favourite Meals</h2>
+                <h2 className="section-title">{isSearching ? 'Search Results — Favourites' : 'Favourite Meals'}</h2>
                 <span className="text-sm font-semibold text-brand bg-brand-light px-3 sm:px-4 py-1.5 rounded-full">
-                  {favoriteMeals.length} saved
+                  {isSearching
+                    ? `${filteredFavoriteMeals.length} match${filteredFavoriteMeals.length !== 1 ? 'es' : ''}`
+                    : `${favoriteMeals.length} saved`}
                 </span>
               </div>
 
-              {favoriteMeals.length > 0 ? (
+              {filteredFavoriteMeals.length > 0 ? (
                 <div className="space-y-4">
-                  {favoriteMeals.map((meal) => (
+                  {filteredFavoriteMeals.map((meal) => (
                     <div
                       key={meal.id}
                       className="border border-slate-100 rounded-2xl p-5 flex justify-between items-start bg-white hover:shadow-md transition-all"
@@ -701,6 +749,11 @@ export default function Profile({ token, username }) {
                     </div>
                   ))}
                 </div>
+              ) : favoriteMeals.length > 0 ? (
+                <div className="text-center py-10 text-slate-500">
+                  <p className="text-lg font-semibold text-slate-600">No favourite meals match your search</p>
+                  <p className="text-sm mt-1">Try a different recipe name or category.</p>
+                </div>
               ) : (
                 <div className="text-center py-10 text-slate-500">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-brand-light flex items-center justify-center">
@@ -715,9 +768,27 @@ export default function Profile({ token, username }) {
                 </div>
               )}
             </div>
+            )}
+
+            {isSearching && !showPantrySection && !showFavoritesSection && (
+              <div className="soft-card p-10 text-center text-slate-500">
+                {pantryItems.length > 0 || favoriteMeals.length > 0 ? (
+                  <>
+                    <p className="text-lg font-semibold text-slate-600">No results for &ldquo;{searchQuery.trim()}&rdquo;</p>
+                    <p className="text-sm mt-1">Try a different ingredient, category, or recipe name.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-lg font-semibold text-slate-600">Nothing to search here yet</p>
+                    <p className="text-sm mt-1">Add pantry items or save favourite meals to search them from Profile.</p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right Column - Stats & Activity */}
+          {!isSearching && (
           <div className="lg:col-span-1 space-y-6">
             {/* Meals Per Week Chart */}
             <div className="soft-card p-6">
@@ -808,6 +879,7 @@ export default function Profile({ token, username }) {
               </div>
             </div>
           </div>
+          )}
         </div>
 
       {/* Add / Edit Pantry Modal */}
