@@ -113,17 +113,314 @@ using (var scope = app.Services.CreateScope())
 
     UserStore.SeedDefaults(db);
 
-    if (!db.Recipes.Any())
+    var seedRecipes = new[]
+{
+    // Breakfast
+    new Recipe
     {
-        db.Recipes.Add(new Recipe
-        {
-            UserId = 1,
-            Title = "Chicken Stir Fry",
-            Ingredients = "chicken, soy sauce, broccoli, rice",
-            Category = "Dinner"
-        });
-        db.SaveChanges();
+        UserId = 1,
+        Title = "Overnight Oats",
+        Ingredients = "rolled oats, milk, honey, banana, berries",
+        Category = "Breakfast"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Banana Pancakes",
+        Ingredients = "banana, eggs, flour, milk, baking powder",
+        Category = "Breakfast"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Avocado Toast",
+        Ingredients = "bread, avocado, lemon juice, tomato, salt",
+        Category = "Breakfast"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Greek Yogurt Parfait",
+        Ingredients = "greek yogurt, granola, honey, strawberries, blueberries",
+        Category = "Breakfast"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Spinach Mushroom Omelette",
+        Ingredients = "eggs, spinach, mushrooms, cheese, olive oil",
+        Category = "Breakfast"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Tofu Scramble",
+        Ingredients = "tofu, spinach, bell pepper, turmeric, olive oil",
+        Category = "Breakfast"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Breakfast Burrito",
+        Ingredients = "tortilla, eggs, beans, cheese, salsa",
+        Category = "Breakfast"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Peanut Butter Toast",
+        Ingredients = "bread, peanut butter, banana, honey",
+        Category = "Breakfast"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Smoothie Bowl",
+        Ingredients = "banana, berries, yogurt, granola, chia seeds",
+        Category = "Breakfast"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Egg Fried Toast",
+        Ingredients = "bread, eggs, butter, cheese, black pepper",
+        Category = "Breakfast"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Chia Pudding",
+        Ingredients = "chia seeds, milk, honey, mango, coconut",
+        Category = "Breakfast"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Apple Cinnamon Oatmeal",
+        Ingredients = "rolled oats, apple, cinnamon, milk, honey",
+        Category = "Breakfast"
+    },
+
+    // Lunch
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Chicken Rice Bowl",
+        Ingredients = "chicken breast, rice, broccoli, carrot, soy sauce",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Tuna Pasta Salad",
+        Ingredients = "pasta, tuna, corn, cucumber, mayonnaise",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Chickpea Salad Wrap",
+        Ingredients = "tortilla, chickpeas, lettuce, tomato, yogurt dressing",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Vegetable Fried Rice",
+        Ingredients = "rice, peas, carrot, corn, soy sauce",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Lentil Soup",
+        Ingredients = "lentils, carrot, onion, garlic, vegetable stock",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Salmon Quinoa Bowl",
+        Ingredients = "salmon, quinoa, cucumber, lettuce, lemon juice",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Turkey Sandwich",
+        Ingredients = "bread, turkey, lettuce, tomato, cheese",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Caprese Pasta",
+        Ingredients = "pasta, tomato, mozzarella, basil, olive oil",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Egg Salad Bowl",
+        Ingredients = "eggs, lettuce, potato, cucumber, mayonnaise",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Sushi Bowl",
+        Ingredients = "rice, seaweed, cucumber, avocado, salmon",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Chicken Caesar Wrap",
+        Ingredients = "tortilla, chicken, lettuce, parmesan, caesar dressing",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Veggie Noodle Soup",
+        Ingredients = "noodles, carrot, cabbage, mushrooms, vegetable stock",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Falafel Bowl",
+        Ingredients = "falafel, rice, cucumber, lettuce, yogurt sauce",
+        Category = "Lunch"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Mushroom Risotto",
+        Ingredients = "rice, mushrooms, onion, parmesan, vegetable stock",
+        Category = "Lunch"
+    },
+
+    // Dinner
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Chicken Stir Fry",
+        Ingredients = "chicken, soy sauce, broccoli, rice",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Beef Bulgogi Bowl",
+        Ingredients = "beef, rice, soy sauce, sesame oil, onion",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Shrimp Garlic Noodles",
+        Ingredients = "shrimp, noodles, garlic, butter, soy sauce",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Vegetable Curry",
+        Ingredients = "potato, carrot, cauliflower, coconut milk, curry powder",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Baked Salmon",
+        Ingredients = "salmon, potato, green beans, lemon juice, olive oil",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Tofu Teriyaki Bowl",
+        Ingredients = "tofu, rice, broccoli, teriyaki sauce, sesame oil",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Spaghetti Bolognese",
+        Ingredients = "spaghetti, minced beef, tomato sauce, onion, garlic",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Black Bean Tacos",
+        Ingredients = "tortilla, black beans, lettuce, tomato, cheese",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Chicken Fajitas",
+        Ingredients = "chicken, tortilla, bell pepper, onion, salsa",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Beef Stew",
+        Ingredients = "beef, potato, carrot, onion, beef stock",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Eggplant Parmesan",
+        Ingredients = "eggplant, tomato sauce, mozzarella, parmesan, basil",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Grilled Chicken Salad",
+        Ingredients = "chicken, lettuce, cucumber, tomato, olive oil",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Sweet Potato Curry",
+        Ingredients = "sweet potato, chickpeas, coconut milk, spinach, curry powder",
+        Category = "Dinner"
+    },
+    new Recipe
+    {
+        UserId = 1,
+        Title = "Pesto Pasta",
+        Ingredients = "pasta, pesto, parmesan, cherry tomato, olive oil",
+        Category = "Dinner"
     }
+};
+
+    foreach (var recipe in seedRecipes)
+    {
+        var existingRecipe = db.Recipes.FirstOrDefault(r =>
+            r.UserId == recipe.UserId &&
+            r.Title == recipe.Title);
+
+        if (existingRecipe == null)
+        {
+            db.Recipes.Add(recipe);
+        }
+        else
+        {
+            existingRecipe.Ingredients = recipe.Ingredients;
+            existingRecipe.Category = recipe.Category;
+            existingRecipe.ImageUrl = recipe.ImageUrl;
+        }
+    }
+
+    db.SaveChanges();
 
     if (!db.MealPlans.Any())
     {
