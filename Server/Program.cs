@@ -10,6 +10,7 @@ using System.ClientModel;
 using OpenAI;
 using Microsoft.IdentityModel.Tokens;
 using Server.Services;
+using Server.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -438,6 +439,19 @@ using (var scope = app.Services.CreateScope())
             new Pantry { UserId = 1, IngredientName = "Rice", Category = "Grains", Quantity = 2, Unit = "kg", ExpiryDate = DateTime.UtcNow.AddMonths(6) },
             new Pantry { UserId = 1, IngredientName = "Eggs", Category = "Proteins", Quantity = 10, Unit = "pieces", ExpiryDate = DateTime.UtcNow.AddDays(14) },
             new Pantry { UserId = 1, IngredientName = "Soy Sauce", Category = "Spices", Quantity = 1, Unit = "bottle", ExpiryDate = DateTime.UtcNow.AddYears(1) });
+        db.SaveChanges();
+    }
+
+    if (!db.RecipeCategories.Any())
+    {
+        db.RecipeCategories.AddRange(
+            new RecipeCategory { Name = "Tacos", Emoji = "🌮", ColorKey = "amber", SortOrder = 0 },
+            new RecipeCategory { Name = "Bowls", Emoji = "🥗", ColorKey = "green", SortOrder = 1 },
+            new RecipeCategory { Name = "Veggie", Emoji = "🥦", ColorKey = "lime", SortOrder = 2 },
+            new RecipeCategory { Name = "Breakfast", Emoji = "🍳", ColorKey = "yellow", SortOrder = 3 },
+            new RecipeCategory { Name = "Dessert", Emoji = "🍰", ColorKey = "pink", SortOrder = 4 },
+            new RecipeCategory { Name = "Thai", Emoji = "🍜", ColorKey = "red", SortOrder = 5 },
+            new RecipeCategory { Name = "Grilled", Emoji = "🥩", ColorKey = "stone", SortOrder = 6 });
         db.SaveChanges();
     }
 }
@@ -930,6 +944,19 @@ app.MapGet("/api/dashboard/weekly-summary/{userId:int}", async (int userId, AppD
         .ToList();
 
     return Results.Ok(mealsByDay);
+});
+
+// "Top Recipe Categories" tiles shown on the user dashboard.
+// Fully managed by admins via AdminController (create/edit/remove).
+app.MapGet("/api/dashboard/categories", async (AppDbContext db) =>
+{
+    var categories = await db.RecipeCategories
+        .OrderBy(c => c.SortOrder)
+        .ThenBy(c => c.Id)
+        .Select(c => new { c.Id, c.Name, c.Emoji, c.ColorKey })
+        .ToListAsync();
+
+    return Results.Ok(categories);
 });
 
 // ---------- Pantry Endpoints ----------
