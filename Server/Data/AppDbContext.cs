@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<Pantry> Pantries => Set<Pantry>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<RecipeCategory> RecipeCategories => Set<RecipeCategory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,6 +21,14 @@ public class AppDbContext : DbContext
             entity.Property(u => u.PasswordHash).IsRequired();
             entity.Property(u => u.Role).IsRequired();
             entity.Property(u => u.ProfilePicture).HasDefaultValue(string.Empty);
+            entity.Property(u => u.IsActive).HasDefaultValue(true);
+        });
+
+        modelBuilder.Entity<RecipeCategory>(entity =>
+        {
+            entity.Property(c => c.Name).IsRequired();
+            entity.Property(c => c.Emoji).HasDefaultValue("🍽️");
+            entity.Property(c => c.ColorKey).HasDefaultValue("amber");
         });
     }
 }
