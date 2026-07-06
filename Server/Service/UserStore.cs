@@ -4,9 +4,6 @@ using Server.Models;
 
 namespace Server.Services;
 
-/// <summary>
-/// SQLite-backed user store so accounts survive server restarts.
-/// </summary>
 public class UserStore
 {
     private readonly AppDbContext _db;
@@ -66,6 +63,15 @@ public class UserStore
         user.PhoneNumber = phoneNumber;
         user.DateOfBirth = dateOfBirth;
         user.Gender = gender;
+        _db.SaveChanges();
+        return true;
+    }
+
+    public bool SetActive(string username, bool isActive)
+    {
+        var user = Find(username);
+        if (user is null) return false;
+        user.IsActive = isActive;
         _db.SaveChanges();
         return true;
     }
