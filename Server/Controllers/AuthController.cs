@@ -60,6 +60,9 @@ public class AuthController : ControllerBase
         if (!_users.Verify(username, request.Password, out var user) || user is null)
             return Unauthorized(new { message = "Invalid credentials." });
 
+        if (!user.IsActive)
+            return Unauthorized(new { message = "This account has been deactivated. Please contact an administrator." });
+
         // The role chosen on the login page must match the account's actual role
         if (!string.IsNullOrEmpty(request.Role) &&
             !user.Role.Equals(request.Role, StringComparison.OrdinalIgnoreCase))
