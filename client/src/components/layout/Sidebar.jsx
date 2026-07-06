@@ -13,11 +13,20 @@ const NAV_ITEMS = [
   },
   {
     to: "/meal-planner",
-    label: "Events",
+    label: "Meal Planner",
     icon: () => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-5 h-5">
         <rect x="3" y="4" width="18" height="18" rx="2" />
         <path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    to: "/pantry",
+    label: "My Pantry",
+    icon: () => (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-5 h-5">
+        <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },
@@ -32,7 +41,7 @@ const NAV_ITEMS = [
   },
 ];
 
-export default function Sidebar({ onLogout }) {
+export default function Sidebar() {
   return (
     <aside className="hidden md:flex flex-col items-center w-[88px] shrink-0 py-6 gap-1">
       <div className="soft-card flex flex-col items-center py-6 px-3 gap-1 h-full min-h-[520px]">
@@ -61,18 +70,6 @@ export default function Sidebar({ onLogout }) {
             )}
           </NavLink>
         ))}
-
-        <div className="flex-1" />
-
-        <button
-          onClick={onLogout}
-          title="Logout"
-          className="mt-2 p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-4 h-4">
-            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
       </div>
     </aside>
   );

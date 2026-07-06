@@ -1,17 +1,45 @@
-import { Link, useLocation } from "react-router-dom";
+import { useState, useRef, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import UserAvatar from "../UserAvatar";
 
 const SEARCH_PLACEHOLDERS = {
   "/": "Search recipes by name, category, or ingredients…",
   "/meal-planner": "Search planned meals by recipe name…",
-  "/profile": "Search pantry items or favourite meals…",
+  "/pantry": "Search pantry items by name or category…",
+  "/profile": "Search favourite meals…",
 };
 
-export default function AppHeader({ searchQuery, onSearchChange, username }) {
+export default function AppHeader({ searchQuery, onSearchChange, username, onLogout }) {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
   const isAiPage = pathname === "/ai-assistant";
   const placeholder = SEARCH_PLACEHOLDERS[pathname] || "Search…";
   const hasSearchText = searchQuery.trim().length > 0;
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [menuOpen]);
+
+  function handleViewProfile() {
+    setMenuOpen(false);
+    navigate("/profile");
+  }
+
+  function handleSignOut() {
+    setMenuOpen(false);
+    onLogout();
+  }
 
   return (
     <header className="flex items-center gap-4 px-6 py-5 border-b border-slate-100/80">
@@ -40,25 +68,46 @@ export default function AppHeader({ searchQuery, onSearchChange, username }) {
         </div>
       )}
 
-      <div className="flex items-center gap-3 shrink-0">
-        <Link
-          to="/meal-planner"
-          title="Meal Planner & Grocery List"
-          className="w-10 h-10 rounded-full flex items-center justify-center text-brand hover:bg-brand-light transition-colors"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-5 h-5">
-            <path d="M4 19.5A2.5 2.5 0 016.5 17H20" strokeLinecap="round" />
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" strokeLinejoin="round" />
-          </svg>
-        </Link>
-
-        <Link
-          to="/profile"
-          title={username ? `Profile — ${username}` : "Profile"}
-          className="rounded-full hover:opacity-90 transition-opacity"
+      <div className="relative shrink-0" ref={menuRef}>
+        <button
+          type="button"
+          onClick={() => setMenuOpen((open) => !open)}
+          title={username ? `Account — ${username}` : "Account"}
+          aria-expanded={menuOpen}
+          aria-haspopup="menu"
+          className="rounded-full hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-brand/30"
         >
           <UserAvatar size="md" className="border-brand/20" />
-        </Link>
+        </button>
+
+        {menuOpen && (
+          <div
+            role="menu"
+            className="absolute right-0 top-full mt-2 w-48 soft-card soft-shadow py-1.5 z-50 border border-slate-100"
+          >
+            {username && (
+              <p className="px-4 py-2 text-xs font-semibold text-slate-400 truncate border-b border-slate-100 mb-1">
+                @{username}
+              </p>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleViewProfile}
+              className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-brand-light hover:text-brand transition-colors"
+            >
+              View profile
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleSignOut}
+              className="w-full text-left px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

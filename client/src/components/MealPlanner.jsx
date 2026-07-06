@@ -338,52 +338,27 @@ export default function MealPlanner() {
       {form && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="soft-card p-8 w-full max-w-md">
-            <h2 className="text-xl font-bold text-slate-800 mb-5">
+            <h2 className="text-xl font-bold text-slate-800 mb-1">
               {form.planId ? "Edit meal" : "Add meal"}
             </h2>
+            <p className="text-sm text-slate-500 mb-5 capitalize">
+              {form.day} · {form.mealSlot}
+            </p>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Day</label>
-                <select
-                  value={form.day}
-                  onChange={(e) => setForm({ ...form, day: e.target.value })}
-                  className="input-field w-full"
-                >
-                  {DAYS.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Meal slot</label>
-                <select
-                  value={form.mealSlot}
-                  onChange={(e) => setForm({ ...form, mealSlot: e.target.value })}
-                  className="input-field w-full capitalize"
-                >
-                  {SLOTS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Recipe</label>
-                <select
-                  value={form.recipeId}
-                  onChange={(e) => setForm({ ...form, recipeId: e.target.value })}
-                  className="input-field w-full"
-                >
-                  <option value="">Choose a recipe</option>
-                  {recipes.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.title} ({r.category})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Recipe</label>
+              <select
+                value={form.recipeId}
+                onChange={(e) => setForm({ ...form, recipeId: e.target.value })}
+                className="input-field w-full"
+              >
+                <option value="">Choose a recipe</option>
+                {recipes.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.title} ({r.category})
+                  </option>
+                ))}
+              </select>
             </div>
 
             {formError && (

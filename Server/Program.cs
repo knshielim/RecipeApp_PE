@@ -109,15 +109,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // Migrate() applies any pending EF Core migrations (creating the database
-    // and all tables/columns on first run, and evolving the schema on later
-    // runs). This replaces EnsureCreated() + the hand-written CREATE TABLE /
-    // ALTER TABLE patches below, which only ever worked for the one column
-    // they were written for and silently drifted from the model otherwise.
-    // See Migrations/ for the schema history — run `dotnet ef migrations add
-    // <Name>` after changing any entity model, then `dotnet ef database
-    // update` (or just restart the app; Migrate() applies pending ones too).
-    db.Database.Migrate();
+    ApplyMigrations(db, app.Environment);
 
     UserStore.SeedDefaults(db);
 
@@ -926,6 +918,35 @@ app.MapGet("/api/profile/recent-activity/{userId:int}", async (int userId, AppDb
 });
 
 app.Run("http://localhost:5237");
+
+static void ApplyMigrations(AppDbContext db, IHostEnvironment env)
+{
+    try
+    {
+        db.Database.Migrate();
+    }
+    catch (Exception ex) when (env.IsDevelopment() && IsExistingTableConflict(ex))
+    {
+        Console.WriteLine();
+        Console.WriteLine("=== Database reset (development only) ===");
+        Console.WriteLine("The local SQLite file was created by an older setup and conflicts with EF migrations.");
+        Console.WriteLine("Deleting ai_assistant_dev.db and creating a fresh database...");
+        Console.WriteLine("(Registered accounts in the old file will be lost — re-register or use seeded users.)");
+        Console.WriteLine();
+        db.Database.EnsureDeleted();
+        db.Database.Migrate();
+    }
+}
+
+static bool IsExistingTableConflict(Exception ex)
+{
+    for (var current = ex; current is not null; current = current.InnerException)
+    {
+        if (current.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
+            return true;
+    }
+    return false;
+}
 
 // ---------- Records ----------
 

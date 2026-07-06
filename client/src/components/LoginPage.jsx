@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { API_BASE, formatFetchError } from "../utils/apiError";
 
-const API = "http://localhost:5237";
+const API = API_BASE;
 
 const ROLES = [
   {
@@ -46,7 +47,7 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
       if (!res.ok) throw new Error(data.message ?? "Login failed.");
       onLoginSuccess(data.token, data.username, data.role);
     } catch (err) {
-      setError(err.message);
+      setError(formatFetchError(err));
     } finally {
       setLoading(false);
     }

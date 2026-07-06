@@ -6,6 +6,7 @@ import Dashboard from "./components/Dashboard";
 import AdminPage from "./components/AdminPage";
 import Profile from "./components/Profile";
 import AIAssistantChat from "./components/AIAssistantChat";
+import PantryPage from "./components/PantryPage";
 import MealPlanner from "./components/MealPlanner";
 import AppLayout from "./components/layout/AppLayout";
 import { UserProfileProvider } from "./context/UserProfileContext";
@@ -86,6 +87,7 @@ function App() {
               } 
             />
             <Route path="/meal-planner" element={<MealPlanner />} />
+            <Route path="/pantry" element={<PantryPage />} />
             <Route path="/profile" element={<Profile token={auth.token} username={auth.username} />} />
             <Route path="/ai-assistant" element={<AIAssistantChat token={auth.token} />} />
             <Route path="*" element={<Navigate to="/" replace />} />

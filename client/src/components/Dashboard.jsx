@@ -45,7 +45,12 @@ const SITE_FEATURES = [
   {
     icon: '👤',
     title: 'Profile',
-    desc: 'Update your account details, manage pantry items, scan grocery receipts or photos, and view your favourite saved meals.',
+    desc: 'Update your account details and view your favourite saved meals.',
+  },
+  {
+    icon: '🧺',
+    title: 'My Pantry',
+    desc: 'Track ingredients, scan grocery receipts or photos, and manage expiry dates.',
   },
 ];
 

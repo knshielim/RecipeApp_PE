@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { API_BASE, formatFetchError } from "../utils/apiError";
 
-const API = "http://localhost:5237";
+const API = API_BASE;
 
 function RegistrationPage({ onGoToLogin }) {
   const [fullName, setFullName] = useState("");
@@ -53,7 +54,7 @@ function RegistrationPage({ onGoToLogin }) {
       setDateOfBirth("");
       setGender("");
     } catch (err) {
-      setError(err.message);
+      setError(formatFetchError(err));
     } finally {
       setLoading(false);
     }
