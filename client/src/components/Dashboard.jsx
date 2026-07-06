@@ -4,21 +4,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { useSearch } from './layout/AppLayout';
 import { getFavoriteMeals, toggleFavoriteMeal } from '../utils/favoriteMeals';
 import { isSearchActive } from '../utils/search';
+import { getCategoryGradient } from '../utils/recipeCategoryColors';
 import UserAvatar from './UserAvatar';
 import { useUserProfile } from '../context/UserProfileContext';
 
 const API = "http://localhost:5237";
 const USER_ID = 1;
-
-const RECIPE_CATEGORIES = [
-  { name: 'Tacos', emoji: '🌮', color: 'from-amber-100 to-orange-200' },
-  { name: 'Bowls', emoji: '🥗', color: 'from-green-100 to-emerald-200' },
-  { name: 'Veggie', emoji: '🥦', color: 'from-lime-100 to-green-200' },
-  { name: 'Breakfast', emoji: '🍳', color: 'from-yellow-100 to-amber-200' },
-  { name: 'Dessert', emoji: '🍰', color: 'from-pink-100 to-rose-200' },
-  { name: 'Thai', emoji: '🍜', color: 'from-red-100 to-orange-200' },
-  { name: 'Grilled', emoji: '🥩', color: 'from-stone-100 to-amber-200' },
-];
 
 const MEAL_TIMES = {
   breakfast: '8:00 AM',
@@ -71,6 +62,7 @@ export default function Dashboard({ username }) {
   const [recentRecipes, setRecentRecipes] = useState([]);
   const [weeklyPlan, setWeeklyPlan] = useState([]);
   const [stats, setStats] = useState({ totalMealPlans: 0 });
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState(null);
   const [favoriteIds, setFavoriteIds] = useState(() =>
@@ -83,14 +75,16 @@ export default function Dashboard({ username }) {
 
   const fetchDashboardData = async () => {
     try {
-      const [recipesRes, planRes, statsRes] = await Promise.all([
+      const [recipesRes, planRes, statsRes, categoriesRes] = await Promise.all([
         fetch(`${API}/api/dashboard/recent-recipes/${USER_ID}`),
         fetch(`${API}/api/dashboard/weekly-summary/${USER_ID}`),
         fetch(`${API}/api/dashboard/stats/${USER_ID}`),
+        fetch(`${API}/api/dashboard/categories`),
       ]);
       setRecentRecipes(await recipesRes.json());
       setWeeklyPlan(await planRes.json());
       setStats(await statsRes.json());
+      setCategories(categoriesRes.ok ? await categoriesRes.json() : []);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -241,15 +235,15 @@ export default function Dashboard({ username }) {
             </button>
           </div>
           <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-2 scrollbar-thin">
-            {RECIPE_CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <button
-                key={cat.name}
+                key={cat.id ?? cat.name}
                 type="button"
                 onClick={() => setActiveCategory(activeCategory === cat.name ? null : cat.name)}
                 className="flex flex-col items-center gap-2 shrink-0 group"
               >
                 <div
-                  className={`w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full bg-gradient-to-br ${cat.color} flex items-center justify-center text-2xl sm:text-3xl border-2 transition-all ${
+                  className={`w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full bg-gradient-to-br ${getCategoryGradient(cat.colorKey)} flex items-center justify-center text-2xl sm:text-3xl border-2 transition-all ${
                     activeCategory === cat.name
                       ? 'border-brand shadow-md scale-105'
                       : 'border-brand/30 group-hover:border-brand/60'
