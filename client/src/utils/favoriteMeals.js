@@ -1,4 +1,4 @@
-const storageKey = (userId) => `recipeApp_favoriteMeals_${userId}`;
+const storageKey = (userId) => `nomly_favoriteMeals_${userId}`;
 
 export function getFavoriteMeals(userId) {
   try {

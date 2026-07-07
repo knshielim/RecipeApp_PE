@@ -147,6 +147,120 @@ public class UserStore
         db.SaveChanges();
     }
 
+    public static void EnsureCommunityUsers(AppDbContext db)
+    {
+        var communityUsers = new[]
+        {
+            new User
+            {
+                Username = "marco",
+                PasswordHash = Hash("password123"),
+                Role = "User",
+                FullName = "Marco Reyes",
+                Email = "marco@example.com",
+                PhoneNumber = "0811111111",
+                DateOfBirth = "1994-03-20",
+                Gender = "Male"
+            },
+            new User
+            {
+                Username = "priya",
+                PasswordHash = Hash("password123"),
+                Role = "User",
+                FullName = "Priya Sharma",
+                Email = "priya@example.com",
+                PhoneNumber = "0822222222",
+                DateOfBirth = "1996-08-09",
+                Gender = "Female"
+            },
+            new User
+            {
+                Username = "sam",
+                PasswordHash = Hash("password123"),
+                Role = "User",
+                FullName = "Sam Wilson",
+                Email = "sam@example.com",
+                PhoneNumber = "0833333333",
+                DateOfBirth = "1993-12-01",
+                Gender = "Male"
+            },
+            new User
+            {
+                Username = "jordan",
+                PasswordHash = Hash("password123"),
+                Role = "User",
+                FullName = "Jordan Kim",
+                Email = "jordan@example.com",
+                PhoneNumber = "0844444444",
+                DateOfBirth = "1997-06-18",
+                Gender = "Non-binary"
+            },
+            new User
+            {
+                Username = "nina",
+                PasswordHash = Hash("password123"),
+                Role = "User",
+                FullName = "Nina Patel",
+                Email = "nina@example.com",
+                PhoneNumber = "0855555555",
+                DateOfBirth = "1999-01-25",
+                Gender = "Female"
+            },
+            new User
+            {
+                Username = "liam",
+                PasswordHash = Hash("password123"),
+                Role = "User",
+                FullName = "Liam O'Brien",
+                Email = "liam@example.com",
+                PhoneNumber = "0866666666",
+                DateOfBirth = "1992-10-30",
+                Gender = "Male"
+            },
+            new User
+            {
+                Username = "sofia",
+                PasswordHash = Hash("password123"),
+                Role = "User",
+                FullName = "Sofia Martinez",
+                Email = "sofia@example.com",
+                PhoneNumber = "0877777777",
+                DateOfBirth = "1998-04-11",
+                Gender = "Female"
+            },
+            new User
+            {
+                Username = "daniel",
+                PasswordHash = Hash("password123"),
+                Role = "User",
+                FullName = "Daniel Chen",
+                Email = "daniel@example.com",
+                PhoneNumber = "0888888888",
+                DateOfBirth = "1991-07-07",
+                Gender = "Male"
+            },
+            new User
+            {
+                Username = "mei",
+                PasswordHash = Hash("password123"),
+                Role = "User",
+                FullName = "Mei Wong",
+                Email = "mei@example.com",
+                PhoneNumber = "0899999999",
+                DateOfBirth = "1995-02-14",
+                Gender = "Female"
+            }
+        };
+
+        foreach (var user in communityUsers)
+        {
+            if (!db.Users.Any(u => u.Username.ToLower() == user.Username.ToLower()))
+                db.Users.Add(user);
+        }
+
+        db.SaveChanges();
+    }
+
     public static string Hash(string password)
     {
         byte[] salt = RandomNumberGenerator.GetBytes(16);

@@ -1,13 +1,8 @@
 const API = "http://localhost:5237";
 
-async function handleResponse(res) {
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message || "Request failed");
-  return data;
-}
-
-export async function getMealPlans(userId) {
-  const res = await fetch(`${API}/api/mealplans/${userId}`);
+export async function getMealPlans(userId, weekStart) {
+  const params = weekStart ? `?weekStart=${weekStart}` : "";
+  const res = await fetch(`${API}/api/mealplans/${userId}${params}`);
   return handleResponse(res);
 }
 
@@ -16,20 +11,20 @@ export async function getRecipes(userId) {
   return handleResponse(res);
 }
 
-export async function createMealPlan({ userId, day, mealSlot, recipeId }) {
+export async function createMealPlan({ userId, weekStartDate, day, mealSlot, recipeId }) {
   const res = await fetch(`${API}/api/mealplans`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, day, mealSlot, recipeId }),
+    body: JSON.stringify({ userId, weekStartDate, day, mealSlot, recipeId }),
   });
   return handleResponse(res);
 }
 
-export async function updateMealPlan(id, { userId, day, mealSlot, recipeId }) {
+export async function updateMealPlan(id, { userId, weekStartDate, day, mealSlot, recipeId }) {
   const res = await fetch(`${API}/api/mealplans/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, day, mealSlot, recipeId }),
+    body: JSON.stringify({ userId, weekStartDate, day, mealSlot, recipeId }),
   });
   return handleResponse(res);
 }
@@ -39,14 +34,22 @@ export async function deleteMealPlan(id) {
   return handleResponse(res);
 }
 
-export async function autoGenerateWeek(userId) {
-  const res = await fetch(`${API}/api/mealplans/${userId}/auto-generate`, {
+export async function autoGenerateWeek(userId, weekStart) {
+  const params = weekStart ? `?weekStart=${weekStart}` : "";
+  const res = await fetch(`${API}/api/mealplans/${userId}/auto-generate${params}`, {
     method: "POST",
   });
   return handleResponse(res);
 }
 
-export async function getGroceryList(userId) {
-  const res = await fetch(`${API}/api/mealplans/${userId}/grocery-list`);
+export async function getGroceryList(userId, weekStart) {
+  const params = weekStart ? `?weekStart=${weekStart}` : "";
+  const res = await fetch(`${API}/api/mealplans/${userId}/grocery-list${params}`);
   return handleResponse(res);
+}
+
+async function handleResponse(res) {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || "Request failed");
+  return data;
 }

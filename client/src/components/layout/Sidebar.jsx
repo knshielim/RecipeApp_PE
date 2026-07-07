@@ -51,7 +51,7 @@ const NAV_ITEMS = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isAdmin = false }) {
   return (
     <aside className="hidden md:flex flex-col items-center w-[88px] shrink-0 py-6 gap-1">
       <div className="soft-card flex flex-col items-center py-6 px-3 gap-1 h-full min-h-[520px]">
@@ -79,6 +79,29 @@ export default function Sidebar() {
             )}
           </NavLink>
         ))}
+        {isAdmin && (
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              `flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl w-full transition-all duration-150 mt-2 border-t border-slate-100 pt-4 ${
+                isActive ? "bg-amber-600 text-white" : "text-amber-700 hover:bg-amber-50"
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <span className={isActive ? "text-white" : "text-amber-700"}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-5 h-5">
+                    <path d="M12 3l7 4v10l-7 4-7-4V7l7-4z" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <span className={`text-[10px] font-semibold leading-tight text-center ${isActive ? "text-white" : "text-amber-700"}`}>
+                  Admin
+                </span>
+              </>
+            )}
+          </NavLink>
+        )}
       </div>
     </aside>
   );

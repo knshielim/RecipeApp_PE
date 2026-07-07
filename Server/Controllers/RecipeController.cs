@@ -44,8 +44,8 @@ public class RecipeController : ControllerBase
             {
                 Id = r.Id,
                 UserId = r.UserId,
-                OwnerUsername = r.OwnerUsername,
-                WriterUsername = r.WriterUsername,
+                OwnerName = r.OwnerName,
+                DietRestriction = r.DietRestriction,
                 Title = r.Title,
                 Ingredients = r.Ingredients,
                 Steps = r.Steps,
@@ -72,8 +72,8 @@ public class RecipeController : ControllerBase
         {
             Id = recipe.Id,
             UserId = recipe.UserId,
-            OwnerUsername = recipe.OwnerUsername,
-            WriterUsername = recipe.WriterUsername,
+            OwnerName = recipe.OwnerName,
+            DietRestriction = recipe.DietRestriction,
             Title = recipe.Title,
             Ingredients = recipe.Ingredients,
             Steps = recipe.Steps,
@@ -89,8 +89,8 @@ public class RecipeController : ControllerBase
         var recipe = new Recipe
         {
             UserId = dto.UserId,
-            OwnerUsername = dto.OwnerUsername,
-            WriterUsername = dto.WriterUsername,
+            OwnerName = dto.OwnerName.Trim(),
+            DietRestriction = string.IsNullOrWhiteSpace(dto.DietRestriction) ? "none" : dto.DietRestriction.Trim(),
             Title = dto.Title,
             Ingredients = dto.Ingredients,
             Steps = dto.Steps,
@@ -105,6 +105,8 @@ public class RecipeController : ControllerBase
         {
             Id = recipe.Id,
             UserId = recipe.UserId,
+            OwnerName = recipe.OwnerName,
+            DietRestriction = recipe.DietRestriction,
             Title = recipe.Title,
             Ingredients = recipe.Ingredients,
             Steps = recipe.Steps,
@@ -130,6 +132,7 @@ public class RecipeController : ControllerBase
         recipe.Ingredients = dto.Ingredients;
         recipe.Steps = dto.Steps;
         recipe.Category = dto.Category;
+        recipe.DietRestriction = string.IsNullOrWhiteSpace(dto.DietRestriction) ? recipe.DietRestriction : dto.DietRestriction.Trim();
         recipe.ImageUrl = dto.ImageUrl;
 
         await _context.SaveChangesAsync();
@@ -169,8 +172,8 @@ public class RecipeController : ControllerBase
             {
                 Id = f.Recipe.Id,
                 UserId = f.Recipe.UserId,
-                OwnerUsername = f.Recipe.OwnerUsername,
-                WriterUsername = f.Recipe.WriterUsername,
+                OwnerName = f.Recipe.OwnerName,
+                DietRestriction = f.Recipe.DietRestriction,
                 Title = f.Recipe.Title,
                 Ingredients = f.Recipe.Ingredients,
                 Steps = f.Recipe.Steps,

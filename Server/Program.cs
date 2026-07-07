@@ -113,6 +113,15 @@ using (var scope = app.Services.CreateScope())
     ApplyMigrations(db, app.Environment);
 
     UserStore.SeedDefaults(db);
+    UserStore.EnsureCommunityUsers(db);
+
+    var seedOwnerUsernames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "alice", "bob", "marco", "priya", "sam", "jordan", "nina", "liam", "sofia", "daniel", "mei"
+    };
+    var ownerPool = db.Users
+        .Where(u => u.Role == "User" && seedOwnerUsernames.Contains(u.Username))
+        .ToList();
 
     var seedRecipes = new[]
 {
@@ -403,6 +412,7 @@ using (var scope = app.Services.CreateScope())
     }
 };
 
+    var index = 0;
     foreach (var recipe in seedRecipes)
     {
         var existingRecipe = db.Recipes.FirstOrDefault(r =>
@@ -411,24 +421,53 @@ using (var scope = app.Services.CreateScope())
 
         if (existingRecipe == null)
         {
+            RecipeSeedEnricher.Enrich(recipe, index, ownerPool);
             db.Recipes.Add(recipe);
         }
         else
         {
             existingRecipe.Ingredients = recipe.Ingredients;
             existingRecipe.Category = recipe.Category;
-            existingRecipe.ImageUrl = recipe.ImageUrl;
+            RecipeSeedEnricher.Enrich(existingRecipe, index, ownerPool);
         }
+        index++;
     }
 
     db.SaveChanges();
+
+    var currentMonday = WeekDateHelper.CurrentMonday();
+
+    // One-time backfill: plans that inherited the migration default land on this week
+    if (db.Database.CanConnect())
+    {
+        try
+        {
+            var legacyDefault = new DateOnly(2026, 7, 7);
+            foreach (var plan in db.MealPlans.Where(p => p.WeekStartDate == legacyDefault))
+                plan.WeekStartDate = currentMonday;
+            db.SaveChanges();
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("WeekStartDate"))
+        {
+            // Column not migrated yet — skip backfill; Migrate() should have run above
+            Console.WriteLine("Warning: WeekStartDate column missing; skipping meal-plan backfill.");
+        }
+    }
 
     if (!db.MealPlans.Any())
     {
         var recipes = db.Recipes.Where(r => r.UserId == 1).ToList();
         if (recipes.Count > 0)
         {
-            db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Monday", MealSlot = "dinner", RecipeId = recipes[0].Id });
+            var weekStart = WeekDateHelper.CurrentMonday();
+            db.MealPlans.Add(new MealPlan
+            {
+                UserId = 1,
+                WeekStartDate = weekStart,
+                Day = "Monday",
+                MealSlot = "dinner",
+                RecipeId = recipes[0].Id
+            });
             db.SaveChanges();
         }
     }
@@ -848,7 +887,10 @@ app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest req, Kernel 
             (string.IsNullOrWhiteSpace(req.Craving) ? "." : $" involving: {req.Craving}.") +
             " Respond with ONLY a JSON object, no prose, no markdown fences, in the form: " +
             "{\"title\":\"...\",\"category\":\"Breakfast|Lunch|Dinner|Snack\"," +
-            "\"ingredients\":\"comma, separated, list\",\"instructions\":\"numbered steps as one string\"}");
+            "\"ingredients\":\"comma, separated, list\",\"instructions\":\"numbered steps as one string\"," +
+            "\"dietRestriction\":\"none|vegetarian|vegan|gluten-free|dairy-free|nut-free|low-carb|paleo|low-sodium|sugar-free|whole30|mediterranean|pescatarian\"," +
+            "\"allergens\":\"comma, separated, allergens, or, empty, string\"," +
+            "\"imageUrl\":\"https://picsum.photos/seed/[recipe-title-slug]/640/400\"}");
         history.AddUserMessage(string.IsNullOrWhiteSpace(req.Craving)
             ? "Surprise me with a new recipe."
             : $"Come up with a new recipe using {req.Craving}.");
@@ -866,7 +908,17 @@ app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest req, Kernel 
             });
         }
 
-        var reply = $"**{parsed.Title}** ({parsed.Category})\n\nIngredients: {parsed.Ingredients}\n\nInstructions:\n{parsed.Instructions}";
+        // Generate image URL if not provided
+        if (string.IsNullOrWhiteSpace(parsed.ImageUrl))
+        {
+            var slug = Uri.EscapeDataString(parsed.Title.Replace(' ', '-').ToLowerInvariant());
+            parsed = parsed with { ImageUrl = $"https://picsum.photos/seed/{slug}/640/400" };
+        }
+
+        var reply = $"**{parsed.Title}** ({parsed.Category})\n\n" +
+            $"Diet: {parsed.DietRestriction}\n" +
+            (string.IsNullOrWhiteSpace(parsed.Allergens) ? "" : $"Allergens: {parsed.Allergens}\n\n") +
+            $"Ingredients: {parsed.Ingredients}\n\nInstructions:\n{parsed.Instructions}";
         return Results.Ok(new { reply, recipe = parsed });
     }
     catch (Exception ex)
@@ -890,7 +942,9 @@ app.MapPost("/api/recipes", async (SaveRecipeRequest req, AppDbContext db) =>
         Title = req.Title.Trim(),
         Ingredients = req.Ingredients.Trim(),
         Category = string.IsNullOrWhiteSpace(req.Category) ? "Uncategorized" : req.Category.Trim(),
-        ImageUrl = string.IsNullOrWhiteSpace(req.ImageUrl) ? "" : req.ImageUrl.Trim()
+        ImageUrl = string.IsNullOrWhiteSpace(req.ImageUrl) ? "" : req.ImageUrl.Trim(),
+        DietRestriction = string.IsNullOrWhiteSpace(req.DietRestriction) ? "none" : req.DietRestriction.Trim(),
+        Allergens = string.IsNullOrWhiteSpace(req.Allergens) ? "" : req.Allergens.Trim()
     };
 
     db.Recipes.Add(recipe);
@@ -919,7 +973,7 @@ app.MapGet("/api/dashboard/recent-recipes/{userId:int}", async (int userId, AppD
         .Where(r => r.UserId == userId)
         .OrderByDescending(r => r.Id)
         .Take(6)
-        .Select(r => new { r.Id, r.Title, r.Category, r.Ingredients })
+        .Select(r => new { r.Id, r.Title, r.Category, r.Ingredients, r.ImageUrl, r.OwnerName, r.DietRestriction })
         .ToListAsync();
 
     return Results.Ok(recentRecipes);
@@ -1248,6 +1302,8 @@ static void ApplyMigrations(AppDbContext db, IHostEnvironment env)
     try
     {
         db.Database.Migrate();
+        EnsureWeekStartDateColumn(db);
+        EnsureRecipeOwnerColumns(db);
     }
     catch (Exception ex) when (env.IsDevelopment() && IsExistingTableConflict(ex))
     {
@@ -1259,6 +1315,76 @@ static void ApplyMigrations(AppDbContext db, IHostEnvironment env)
         Console.WriteLine();
         db.Database.EnsureDeleted();
         db.Database.Migrate();
+        EnsureWeekStartDateColumn(db);
+        EnsureRecipeOwnerColumns(db);
+    }
+}
+
+// The AddMealPlanWeekStartDate migration was once generated with an empty Up()
+// body on some machines, so the history row can exist without the column.
+static void EnsureWeekStartDateColumn(AppDbContext db)
+{
+    var connection = db.Database.GetDbConnection();
+    if (connection.State != System.Data.ConnectionState.Open)
+        connection.Open();
+
+    using var info = connection.CreateCommand();
+    info.CommandText = "PRAGMA table_info(MealPlans);";
+    using var reader = info.ExecuteReader();
+    var hasColumn = false;
+    while (reader.Read())
+    {
+        if (string.Equals(reader.GetString(1), "WeekStartDate", StringComparison.OrdinalIgnoreCase))
+        {
+            hasColumn = true;
+            break;
+        }
+    }
+
+    if (!hasColumn)
+    {
+        Console.WriteLine("Applying missing WeekStartDate column on MealPlans...");
+        db.Database.ExecuteSqlRaw(
+            "ALTER TABLE MealPlans ADD COLUMN WeekStartDate TEXT NOT NULL DEFAULT '2026-07-07';");
+    }
+}
+
+static void EnsureRecipeOwnerColumns(AppDbContext db)
+{
+    var connection = db.Database.GetDbConnection();
+    if (connection.State != System.Data.ConnectionState.Open)
+        connection.Open();
+
+    var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    using (var info = connection.CreateCommand())
+    {
+        info.CommandText = "PRAGMA table_info(Recipes);";
+        using var reader = info.ExecuteReader();
+        while (reader.Read())
+            columns.Add(reader.GetString(1));
+    }
+
+    if (!columns.Contains("OwnerName"))
+    {
+        Console.WriteLine("Applying missing OwnerName column on Recipes...");
+        db.Database.ExecuteSqlRaw("ALTER TABLE Recipes ADD COLUMN OwnerName TEXT NOT NULL DEFAULT '';");
+
+        if (columns.Contains("OwnerUsername"))
+        {
+            db.Database.ExecuteSqlRaw("""
+                UPDATE Recipes
+                SET OwnerName = COALESCE(
+                    (SELECT FullName FROM Users WHERE lower(Users.Username) = lower(Recipes.OwnerUsername)),
+                    OwnerUsername
+                );
+                """);
+        }
+    }
+
+    if (!columns.Contains("DietRestriction"))
+    {
+        Console.WriteLine("Applying missing DietRestriction column on Recipes...");
+        db.Database.ExecuteSqlRaw("ALTER TABLE Recipes ADD COLUMN DietRestriction TEXT NOT NULL DEFAULT 'none';");
     }
 }
 
@@ -1282,5 +1408,5 @@ record MealCheckRequest(int RecipeId);
 record DetectedObject(string Label, double Confidence, int YMin, int XMin, int YMax, int XMax, string? Unit);
 record DetectionResult(List<DetectedObject> Objects, string Summary);
 record GenerateRecipeRequest(string? Craving);
-record GeneratedRecipe(string Title, string Category, string Ingredients, string Instructions);
-record SaveRecipeRequest(string Title, string Ingredients, string? Category, string? ImageUrl);
+record GeneratedRecipe(string Title, string Category, string Ingredients, string Instructions, string DietRestriction, string Allergens, string ImageUrl);
+record SaveRecipeRequest(string Title, string Ingredients, string? Category, string? ImageUrl, string? DietRestriction, string? Allergens);

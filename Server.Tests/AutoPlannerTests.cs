@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Server.Models;
 using Server.Services;
 using Xunit;
 
@@ -171,7 +172,7 @@ public class AutoGenerateEndpointTests
     {
         using var db = TestHelpers.NewDb();
         var recipe = TestHelpers.AddRecipe(db, 1, "A", "rice");
-        db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Monday", MealSlot = "dinner", RecipeId = recipe.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 1, WeekStartDate = TestHelpers.CurrentWeek, Day = "Monday", MealSlot = "dinner", RecipeId = recipe.Id });
         db.SaveChanges();
         var controller = TestHelpers.NewController(db);
 
@@ -213,7 +214,7 @@ public class AutoGenerateEndpointTests
         using var db = TestHelpers.NewDb();
         var mine = TestHelpers.AddRecipe(db, 1, "Mine", "rice");
         var theirs = TestHelpers.AddRecipe(db, 2, "Theirs", "beef");
-        db.MealPlans.Add(new MealPlan { UserId = 2, Day = "Monday", MealSlot = "dinner", RecipeId = theirs.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 2, WeekStartDate = TestHelpers.CurrentWeek, Day = "Monday", MealSlot = "dinner", RecipeId = theirs.Id });
         db.SaveChanges();
         var controller = TestHelpers.NewController(db);
 

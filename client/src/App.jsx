@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  Outlet,
+} from "react-router-dom";
 import LoginPage from "./components/LoginPage";
 import RegistrationPage from "./components/RegistrationPage";
 import Dashboard from "./components/Dashboard";
@@ -33,6 +40,17 @@ function RegisterWrapper() {
   );
 }
 
+function UserAppShell({ auth, onLogout }) {
+  const isAdmin = auth.role === "Admin";
+  return (
+    <UserProfileProvider token={auth.token} username={auth.username}>
+      <AppLayout username={auth.username} onLogout={onLogout} isAdmin={isAdmin}>
+        <Outlet />
+      </AppLayout>
+    </UserProfileProvider>
+  );
+}
+
 function App() {
   const [auth, setAuth] = useState(null);
 
@@ -62,42 +80,49 @@ function App() {
     );
   }
 
-  if (auth.role === "Admin") {
-    return (
-      <AdminPage
-        token={auth.token}
-        username={auth.username}
-        onLogout={handleLogout}
-      />
-    );
-  }
+  const isAdmin = auth.role === "Admin";
+  const homePath = isAdmin ? "/admin" : "/";
 
   return (
     <Router>
-      <UserProfileProvider token={auth.token} username={auth.username}>
-        <AppLayout username={auth.username} onLogout={handleLogout}>
-          <Routes>
-            <Route
-              path="/"
-              element={
-                <Dashboard
-                  token={auth.token}
-                  username={auth.username}
-                  role={auth.role}
-                  onLogout={handleLogout}
-                />
-              }
-            />
-            <Route path="/meal-planner" element={<MealPlanner />} />
-            <Route path="/pantry" element={<PantryPage />} />
-            <Route path="/recipes" element={<RecipesPage username={auth.username} />} />
-            <Route path="/recipes/:id" element={<RecipeDetail username={auth.username} />} />
-            <Route path="/profile" element={<Profile token={auth.token} username={auth.username} />} />
-            <Route path="/ai-assistant" element={<AIAssistantChat token={auth.token} />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </AppLayout>
-      </UserProfileProvider>
+      <Routes>
+        {isAdmin && (
+          <Route
+            path="/admin"
+            element={
+              <AdminPage
+                token={auth.token}
+                username={auth.username}
+                onLogout={handleLogout}
+              />
+            }
+          />
+        )}
+
+        <Route
+          element={<UserAppShell auth={auth} onLogout={handleLogout} />}
+        >
+          <Route
+            path="/"
+            element={
+              <Dashboard
+                token={auth.token}
+                username={auth.username}
+                role={auth.role}
+                onLogout={handleLogout}
+              />
+            }
+          />
+          <Route path="/meal-planner" element={<MealPlanner />} />
+          <Route path="/pantry" element={<PantryPage />} />
+          <Route path="/recipes" element={<RecipesPage username={auth.username} isAdmin={isAdmin} />} />
+          <Route path="/recipes/:id" element={<RecipeDetail username={auth.username} isAdmin={isAdmin} />} />
+          <Route path="/profile" element={<Profile token={auth.token} username={auth.username} />} />
+          <Route path="/ai-assistant" element={<AIAssistantChat token={auth.token} />} />
+        </Route>
+
+        <Route path="*" element={<Navigate to={homePath} replace />} />
+      </Routes>
     </Router>
   );
 }

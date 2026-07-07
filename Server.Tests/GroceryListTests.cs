@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Server.Models;
 using Xunit;
 
 namespace Server.Tests;
@@ -40,8 +41,8 @@ public class GroceryListTests
         using var db = TestHelpers.NewDb();
         var stirFry = TestHelpers.AddRecipe(db, 1, "Stir Fry", "chicken, rice, broccoli");
         var friedRice = TestHelpers.AddRecipe(db, 1, "Fried Rice", "rice, egg");
-        db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Monday", MealSlot = "dinner", RecipeId = stirFry.Id });
-        db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Tuesday", MealSlot = "dinner", RecipeId = friedRice.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 1, WeekStartDate = TestHelpers.CurrentWeek, Day = "Monday", MealSlot = "dinner", RecipeId = stirFry.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 1, WeekStartDate = TestHelpers.CurrentWeek, Day = "Tuesday", MealSlot = "dinner", RecipeId = friedRice.Id });
         db.SaveChanges();
 
         var root = await GetList(db, 1);
@@ -56,8 +57,8 @@ public class GroceryListTests
     {
         using var db = TestHelpers.NewDb();
         var stirFry = TestHelpers.AddRecipe(db, 1, "Stir Fry", "chicken, rice");
-        db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Monday", MealSlot = "dinner", RecipeId = stirFry.Id });
-        db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Wednesday", MealSlot = "lunch", RecipeId = stirFry.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 1, WeekStartDate = TestHelpers.CurrentWeek, Day = "Monday", MealSlot = "dinner", RecipeId = stirFry.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 1, WeekStartDate = TestHelpers.CurrentWeek, Day = "Wednesday", MealSlot = "lunch", RecipeId = stirFry.Id });
         db.SaveChanges();
 
         var root = await GetList(db, 1);
@@ -71,8 +72,8 @@ public class GroceryListTests
         using var db = TestHelpers.NewDb();
         var a = TestHelpers.AddRecipe(db, 1, "Rice Bowl", "200 g rice, 2 eggs");
         var b = TestHelpers.AddRecipe(db, 1, "Rice Plate", "300 g rice");
-        db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Monday", MealSlot = "lunch", RecipeId = a.Id });
-        db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Tuesday", MealSlot = "lunch", RecipeId = b.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 1, WeekStartDate = TestHelpers.CurrentWeek, Day = "Monday", MealSlot = "lunch", RecipeId = a.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 1, WeekStartDate = TestHelpers.CurrentWeek, Day = "Tuesday", MealSlot = "lunch", RecipeId = b.Id });
         db.SaveChanges();
 
         var root = await GetList(db, 1);
@@ -88,8 +89,8 @@ public class GroceryListTests
         using var db = TestHelpers.NewDb();
         var a = TestHelpers.AddRecipe(db, 1, "Soup", "200 g rice");
         var b = TestHelpers.AddRecipe(db, 1, "Side", "1 cup rice");
-        db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Monday", MealSlot = "lunch", RecipeId = a.Id });
-        db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Tuesday", MealSlot = "lunch", RecipeId = b.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 1, WeekStartDate = TestHelpers.CurrentWeek, Day = "Monday", MealSlot = "lunch", RecipeId = a.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 1, WeekStartDate = TestHelpers.CurrentWeek, Day = "Tuesday", MealSlot = "lunch", RecipeId = b.Id });
         db.SaveChanges();
 
         var root = await GetList(db, 1);
@@ -105,7 +106,7 @@ public class GroceryListTests
     {
         using var db = TestHelpers.NewDb();
         var theirs = TestHelpers.AddRecipe(db, 2, "Their Meal", "tofu");
-        db.MealPlans.Add(new MealPlan { UserId = 2, Day = "Monday", MealSlot = "dinner", RecipeId = theirs.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 2, WeekStartDate = TestHelpers.CurrentWeek, Day = "Monday", MealSlot = "dinner", RecipeId = theirs.Id });
         db.SaveChanges();
 
         var root = await GetList(db, 1);

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   getRecipes,
   createRecipe,
@@ -9,6 +8,12 @@ import {
   addFavoriteRecipe,
   removeFavoriteRecipe,
 } from "../api/recipes";
+import RecipeCard from "./RecipeCard";
+import { canManageRecipe } from "../utils/recipePermissions";
+import { useUserProfile } from "../context/UserProfileContext";
+import { DIET_OPTIONS } from "../utils/dietLabels";
+
+const API = "http://localhost:5237";
 
 const emptyForm = {
   userId: 1,
@@ -16,13 +21,17 @@ const emptyForm = {
   ingredients: "",
   steps: "",
   category: "",
+  dietRestriction: "none",
+  allergens: "",
   imageUrl: "",
 };
 
-function RecipesPage({ username }) {
-  const navigate = useNavigate();
+const FALLBACK_CATEGORIES = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
+function RecipesPage({ username, isAdmin = false }) {
+  const { displayName } = useUserProfile();
   const [recipes, setRecipes] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
@@ -30,8 +39,11 @@ function RecipesPage({ username }) {
   const [error, setError] = useState("");
   const [favoriteIds, setFavoriteIds] = useState(new Set());
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   async function loadRecipes() {
+    setLoading(true);
     try {
       let data = [];
 
@@ -50,8 +62,30 @@ function RecipesPage({ username }) {
     } catch (err) {
       console.error(err);
       setError("Failed to load recipes.");
+    } finally {
+      setLoading(false);
     }
   }
+
+  async function loadCategories() {
+    try {
+      const res = await fetch(`${API}/api/dashboard/categories`);
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(data.map((c) => c.name).filter(Boolean));
+      }
+    } catch {
+      setCategories(FALLBACK_CATEGORIES);
+    }
+  }
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  useEffect(() => {
+    loadRecipes();
+  }, [showFavoritesOnly]);
 
   async function toggleFavorite(recipeId) {
     if (!username) {
@@ -65,7 +99,6 @@ function RecipesPage({ username }) {
       } else {
         await addFavoriteRecipe(recipeId, username);
       }
-
       await loadRecipes();
     } catch (err) {
       console.error(err);
@@ -73,17 +106,9 @@ function RecipesPage({ username }) {
     }
   }
 
-  useEffect(() => {
-    loadRecipes();
-  }, [showFavoritesOnly]);
-
   function handleChange(e) {
     const { name, value } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setForm((prev) => ({ ...prev, [name]: value }));
   }
 
   function validateForm() {
@@ -91,12 +116,40 @@ function RecipesPage({ username }) {
     if (!form.ingredients.trim()) return "Ingredients are required.";
     if (!form.steps.trim()) return "Steps are required.";
     if (!form.category.trim()) return "Category is required.";
-
     if (form.imageUrl.trim() && !form.imageUrl.startsWith("http")) {
       return "Image URL must start with http or https.";
     }
-
     return "";
+  }
+
+  function openCreateModal() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setError("");
+    setShowModal(true);
+  }
+
+  function openEditModal(recipe) {
+    setEditingId(recipe.id);
+    setForm({
+      userId: recipe.userId,
+      title: recipe.title,
+      ingredients: recipe.ingredients,
+      steps: recipe.steps || "",
+      category: recipe.category,
+      dietRestriction: recipe.dietRestriction || "none",
+      allergens: recipe.allergens || "",
+      imageUrl: recipe.imageUrl || "",
+    });
+    setError("");
+    setShowModal(true);
+  }
+
+  function closeModal() {
+    setShowModal(false);
+    setEditingId(null);
+    setForm(emptyForm);
+    setError("");
   }
 
   async function handleSubmit(e) {
@@ -104,7 +157,6 @@ function RecipesPage({ username }) {
     setError("");
 
     const validationError = validateForm();
-
     if (validationError) {
       setError(validationError);
       return;
@@ -117,18 +169,18 @@ function RecipesPage({ username }) {
           ingredients: form.ingredients,
           steps: form.steps,
           category: form.category,
+          dietRestriction: form.dietRestriction,
+          allergens: form.allergens,
           imageUrl: form.imageUrl,
         });
       } else {
         await createRecipe({
           ...form,
-          ownerUsername: username || "",
-          writerUsername: username || "",
+          ownerName: displayName || username || "",
         });
       }
 
-      setForm(emptyForm);
-      setEditingId(null);
+      closeModal();
       await loadRecipes();
     } catch (err) {
       console.error(err);
@@ -136,24 +188,8 @@ function RecipesPage({ username }) {
     }
   }
 
-  function startEdit(recipe) {
-    setEditingId(recipe.id);
-
-    setForm({
-      userId: recipe.userId,
-      title: recipe.title,
-      ingredients: recipe.ingredients,
-      steps: recipe.steps || "",
-      category: recipe.category,
-      imageUrl: recipe.imageUrl || "",
-    });
-
-    setError("");
-  }
-
   async function handleDelete(id) {
     const confirmed = window.confirm("Delete this recipe?");
-
     if (!confirmed) return;
 
     try {
@@ -165,200 +201,343 @@ function RecipesPage({ username }) {
     }
   }
 
-  function cancelEdit() {
-    setEditingId(null);
-    setForm(emptyForm);
-    setError("");
-  }
-
   async function handleSearch(e) {
     e.preventDefault();
     await loadRecipes();
   }
 
+  async function clearFilters() {
+    setSearch("");
+    setCategory("");
+    setShowFavoritesOnly(false);
+    setLoading(true);
+    try {
+      const data = await getRecipes("", "");
+      setRecipes(data);
+      if (username) {
+        const favorites = await getFavoriteRecipes(username);
+        setFavoriteIds(new Set(favorites.map((recipe) => recipe.id)));
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load recipes.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const categoryOptions =
+    categories.length > 0 ? categories : FALLBACK_CATEGORIES;
+
+  const hasActiveFilters = search.trim() || category || showFavoritesOnly;
+
   return (
-    <div style={{ padding: "24px" }}>
-      <h1>Recipes</h1>
-
-      <form onSubmit={handleSearch} style={{ marginBottom: "20px" }}>
-        <input
-          type="text"
-          placeholder="Search recipes..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ marginRight: "8px" }}
-        />
-
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          style={{ marginRight: "8px" }}
-        >
-          <option value="">All Categories</option>
-          <option value="Breakfast">Breakfast</option>
-          <option value="Lunch">Lunch</option>
-          <option value="Dinner">Dinner</option>
-          <option value="Snack">Snack</option>
-          <option value="Test">Test</option>
-        </select>
-
-        <button type="submit">Search</button>
-
-        <button
-          type="button"
-          onClick={() => setShowFavoritesOnly((prev) => !prev)}
-          style={{ marginLeft: "8px" }}
-        >
-          {showFavoritesOnly ? "Show All Recipes" : "Show Favorites"}
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="section-title text-2xl sm:text-3xl">Recipes</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Browse, search, and manage your recipe collection
+          </p>
+        </div>
+        <button type="button" onClick={openCreateModal} className="btn-primary text-sm shrink-0">
+          + Create New Recipe
         </button>
-      </form>
+      </div>
 
-      <form onSubmit={handleSubmit} style={{ marginBottom: "24px" }}>
-        <h2>{editingId ? "Edit Recipe" : "Add Recipe"}</h2>
+      {/* Filters */}
+      <div className="soft-card p-4 sm:p-5 space-y-4">
+        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 relative">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3-3" strokeLinecap="round" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search by title or ingredients..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="input-field w-full pl-9"
+            />
+          </div>
 
-        {error && <p style={{ color: "red" }}>{error}</p>}
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="input-field sm:w-44"
+          >
+            <option value="">All categories</option>
+            {categoryOptions.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
 
-        <div>
-          <input
-            name="title"
-            placeholder="Title"
-            value={form.title}
-            onChange={handleChange}
-          />
-        </div>
+          <button type="submit" className="btn-primary text-sm sm:px-6">
+            Search
+          </button>
+        </form>
 
-        <div>
-          <textarea
-            name="ingredients"
-            placeholder="Ingredients"
-            value={form.ingredients}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <textarea
-            name="steps"
-            placeholder="Steps"
-            value={form.steps}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <input
-            name="category"
-            placeholder="Category"
-            value={form.category}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <input
-            name="imageUrl"
-            placeholder="Image URL"
-            value={form.imageUrl}
-            onChange={handleChange}
-          />
-        </div>
-
-        <button type="submit">
-          {editingId ? "Update Recipe" : "Create Recipe"}
-        </button>
-
-        {editingId && (
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={cancelEdit}
-            style={{ marginLeft: "8px" }}
+            onClick={() => setShowFavoritesOnly((prev) => !prev)}
+            className={`text-sm font-semibold px-4 py-2 rounded-full border transition-colors ${
+              showFavoritesOnly
+                ? "bg-red-50 text-red-600 border-red-200"
+                : "bg-white text-slate-600 border-slate-200 hover:border-brand/40 hover:text-brand"
+            }`}
           >
-            Cancel
+            {showFavoritesOnly ? "★ Favourites only" : "☆ Show favourites"}
           </button>
-        )}
-      </form>
 
-      <h2>{showFavoritesOnly ? "Favorite Recipes" : "Recipe List"}</h2>
-
-      {recipes.length === 0 ? (
-        <p>No recipes found.</p>
-      ) : (
-        <div style={{ display: "grid", gap: "12px" }}>
-          {recipes.map((recipe) => (
-            <div
-              key={recipe.id}
-              style={{
-                border: "1px solid #ccc",
-                borderRadius: "8px",
-                padding: "12px",
-              }}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-sm font-medium text-slate-500 hover:text-brand px-3 py-2"
             >
-              <h3>{recipe.title}</h3>
+              Clear filters
+            </button>
+          )}
 
-              <p>
-                <strong>Category:</strong> {recipe.category}
-              </p>
+          <span className="text-xs text-slate-400 sm:ml-auto">
+            {loading ? "Loading..." : `${recipes.length} recipe${recipes.length !== 1 ? "s" : ""}`}
+          </span>
+        </div>
+      </div>
 
-              <p>
-                <strong>Ingredients:</strong> {recipe.ingredients}
-              </p>
+      {error && !showModal && (
+        <p className="text-red-600 text-sm font-medium bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+          {error}
+        </p>
+      )}
 
-              <p>
-                <strong>Steps:</strong> {recipe.steps || "No steps provided."}
-              </p>
+      {/* Recipe list */}
+      <section>
+        <h2 className="section-title text-lg mb-4">
+          {showFavoritesOnly ? "Favourite Recipes" : "All Recipes"}
+        </h2>
 
-              {recipe.ownerUsername && (
-                <p>
-                  <strong>Owner:</strong> {recipe.ownerUsername}
-                </p>
-              )}
+        {loading ? (
+          <div className="soft-card p-10 text-center text-slate-500">Loading recipes...</div>
+        ) : recipes.length === 0 ? (
+          <div className="soft-card p-10 text-center">
+            <span className="text-4xl">🍳</span>
+            <p className="text-slate-500 mt-3">
+              {hasActiveFilters ? "No recipes match your filters." : "No recipes found yet."}
+            </p>
+            {!hasActiveFilters && (
+              <button type="button" onClick={openCreateModal} className="btn-primary text-sm mt-4">
+                Create your first recipe
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {recipes.map((recipe) => {
+              const canManage = canManageRecipe(recipe, username, isAdmin, displayName);
 
-              {recipe.writerUsername && (
-                <p>
-                  <strong>Writer:</strong> {recipe.writerUsername}
-                </p>
-              )}
+              return (
+                <div key={recipe.id}>
+                  <RecipeCard
+                    recipe={recipe}
+                    detailPath={`/recipes/${recipe.id}`}
+                    favoriteButton={
+                      <button
+                        type="button"
+                        onClick={() => toggleFavorite(recipe.id)}
+                        title={
+                          favoriteIds.has(recipe.id)
+                            ? "Remove from favourites"
+                            : "Add to favourites"
+                        }
+                        className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full flex items-center justify-center bg-white/90 shadow-sm hover:scale-105 transition-transform"
+                      >
+                        <span className="text-lg">
+                          {favoriteIds.has(recipe.id) ? "★" : "☆"}
+                        </span>
+                      </button>
+                    }
+                  />
+                  {canManage && (
+                    <div className="flex gap-3 mt-2 ml-2">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(recipe)}
+                        className="text-sm text-brand font-semibold hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(recipe.id)}
+                        className="text-sm text-red-600 font-semibold hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-              {recipe.imageUrl && (
-                <img
-                  src={recipe.imageUrl}
-                  alt={recipe.title}
-                  style={{
-                    width: "180px",
-                    height: "120px",
-                    objectFit: "cover",
-                    borderRadius: "6px",
-                  }}
+      {/* Create / Edit modal */}
+      {showModal && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4 py-8"
+          onClick={closeModal}
+        >
+          <div
+            className="soft-card p-6 sm:p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <h2 className="section-title text-xl">
+                {editingId ? "Edit Recipe" : "Create New Recipe"}
+              </h2>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="text-slate-400 hover:text-slate-600 p-1"
+                aria-label="Close"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                  <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Title *</label>
+                <input
+                  name="title"
+                  placeholder="e.g. Chicken Stir Fry"
+                  value={form.title}
+                  onChange={handleChange}
+                  className="input-field w-full"
+                  required
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Ingredients *</label>
+                <textarea
+                  name="ingredients"
+                  placeholder="Comma-separated, e.g. chicken, soy sauce, garlic"
+                  value={form.ingredients}
+                  onChange={handleChange}
+                  rows={3}
+                  className="input-field w-full resize-y"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Steps *</label>
+                <textarea
+                  name="steps"
+                  placeholder="One step per line"
+                  value={form.steps}
+                  onChange={handleChange}
+                  rows={4}
+                  className="input-field w-full resize-y"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Category *</label>
+                <select
+                  name="category"
+                  value={form.category}
+                  onChange={handleChange}
+                  className="input-field w-full"
+                  required
+                >
+                  <option value="">Select a category</option>
+                  {categoryOptions.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Diet Restriction *</label>
+                <select
+                  name="dietRestriction"
+                  value={form.dietRestriction}
+                  onChange={handleChange}
+                  className="input-field w-full"
+                  required
+                >
+                  {DIET_OPTIONS.map((diet) => (
+                    <option key={diet.value} value={diet.value}>
+                      {diet.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Allergens <span className="font-normal text-slate-400">(optional, comma-separated)</span>
+                </label>
+                <input
+                  name="allergens"
+                  placeholder="e.g., Peanuts, Dairy, Gluten"
+                  value={form.allergens}
+                  onChange={handleChange}
+                  className="input-field w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Image URL <span className="font-normal text-slate-400">(optional)</span>
+                </label>
+                <input
+                  name="imageUrl"
+                  placeholder="https://..."
+                  value={form.imageUrl}
+                  onChange={handleChange}
+                  className="input-field w-full"
+                />
+              </div>
+
+              {error && (
+                <p className="text-red-500 text-sm font-medium bg-red-50 p-3 rounded-xl">{error}</p>
               )}
 
-              <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
+              <div className="flex gap-3 pt-2">
+                <button type="submit" className="btn-primary text-sm flex-1">
+                  {editingId ? "Save Changes" : "Create Recipe"}
+                </button>
                 <button
                   type="button"
-                  onClick={() => navigate(`/recipes/${recipe.id}`)}
+                  onClick={closeModal}
+                  className="px-5 py-2 rounded-full text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50"
                 >
-                  View Details
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => toggleFavorite(recipe.id)}
-                >
-                  {favoriteIds.has(recipe.id)
-                    ? "★ Favorited"
-                    : "☆ Add to Favorite"}
-                </button>
-
-                <button type="button" onClick={() => startEdit(recipe)}>
-                  Edit
-                </button>
-
-                <button type="button" onClick={() => handleDelete(recipe.id)}>
-                  Delete
+                  Cancel
                 </button>
               </div>
-            </div>
-          ))}
+            </form>
+          </div>
         </div>
       )}
     </div>

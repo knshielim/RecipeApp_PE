@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { CATEGORY_COLOR_OPTIONS, getCategoryGradient } from "../utils/recipeCategoryColors";
 
 const API = "http://localhost:5237";
@@ -13,18 +14,24 @@ async function safeJson(res) {
   }
 }
 
-function TopBar({ username, role, onLogout }) {
+function TopBar({ username, role, onLogout, onUserDashboard }) {
   return (
     <nav className="bg-white soft-shadow border-b border-slate-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-brand">RecipeApp</h1>
+            <h1 className="text-2xl font-bold text-brand">Nomly</h1>
             <span className="text-xs font-semibold bg-brand-light text-brand px-3 py-1 rounded-full">
               {role}
             </span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onUserDashboard}
+              className="px-3 py-2 text-sm font-semibold rounded-md text-brand bg-brand-light hover:bg-brand/10 border border-brand/20"
+            >
+              User Dashboard
+            </button>
             <span className="text-sm text-slate-500 hidden sm:block">
               Signed in as <span className="font-semibold text-slate-900">{username}</span>
             </span>
@@ -49,6 +56,7 @@ const EMPTY_CATEGORY_FORM = { name: "", emoji: "🍽️", colorKey: "amber", sor
 const EMPTY_RECIPE_FORM = { title: "", category: "", ingredients: "", imageUrl: "" };
 
 function AdminPage({ token, username, onLogout }) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState("users");
   const [users, setUsers] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -357,6 +365,10 @@ function AdminPage({ token, username, onLogout }) {
       loadRecipes
     );
 
+  function goToUserDashboard() {
+    navigate("/");
+  }
+
   const tabClass = (active) =>
     `px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
       active
@@ -370,7 +382,12 @@ function AdminPage({ token, username, onLogout }) {
 
   return (
     <div className="min-h-screen bg-surface">
-      <TopBar username={username} role="Admin" onLogout={onLogout} />
+      <TopBar
+        username={username}
+        role="Admin"
+        onLogout={onLogout}
+        onUserDashboard={() => navigate("/")}
+      />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -404,108 +421,119 @@ function AdminPage({ token, username, onLogout }) {
           </p>
         )}
 
-        {/* Edit user card */}
-        {tab === "users" && editUser && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-            <h2 className="font-bold text-lg text-slate-900 mb-1">
-              Edit user information
-            </h2>
-            <p className="text-sm text-slate-500 mb-5">
-              Editing <span className="font-semibold text-green-600">@{editUser}</span>
-              {" "}— username cannot be changed.
-            </p>
-            <form onSubmit={saveEdit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Name *</label>
-                  <input
-                    type="text"
-                    name="fullName"
-                    value={editForm.fullName}
-                    onChange={handleEditInput}
-                    className={inputClass}
-                    placeholder="e.g., Alice Tan"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email *</label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={editForm.email}
-                    onChange={handleEditInput}
-                    className={inputClass}
-                    placeholder="user@example.com"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phone Number</label>
-                  <input
-                    type="tel"
-                    name="phoneNumber"
-                    value={editForm.phoneNumber}
-                    onChange={handleEditInput}
-                    className={inputClass}
-                    placeholder="08xxxxxxxxxx"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date of Birth</label>
-                  <input
-                    type="date"
-                    name="dateOfBirth"
-                    value={editForm.dateOfBirth}
-                    onChange={handleEditInput}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Gender</label>
-                  <select
-                    name="gender"
-                    value={editForm.gender}
-                    onChange={handleEditInput}
-                    className={`${inputClass} bg-white`}
-                  >
-                    <option value="">Prefer not to say</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Reset Password</label>
-                  <input
-                    type="password"
-                    name="newPassword"
-                    value={editForm.newPassword}
-                    onChange={handleEditInput}
-                    className={inputClass}
-                    autoComplete="new-password"
-                    placeholder="Leave blank to keep current"
-                  />
-                  <p className="text-xs text-slate-400 mt-1">Optional — at least 6 characters if set.</p>
-                </div>
-              </div>
-              <div className="flex gap-3">
+        {/* Edit user modal */}
+        {editUser && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+            <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6 sm:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="font-bold text-xl text-slate-900">Edit user information</h2>
                 <button
-                  type="submit"
-                  disabled={savingEdit}
-                  className="bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm shadow-sm disabled:opacity-50"
-                >
-                  {savingEdit ? "Saving..." : "Save Changes"}
-                </button>
-                <button
-                  type="button"
                   onClick={cancelEdit}
-                  className="bg-slate-100 text-slate-700 px-6 py-2.5 rounded-lg hover:bg-slate-200 transition-colors font-semibold text-sm"
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                  aria-label="Close"
                 >
-                  Cancel
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                  </svg>
                 </button>
               </div>
-            </form>
+              <p className="text-sm text-slate-500 mb-5">
+                Editing <span className="font-semibold text-green-600">@{editUser}</span>
+                {" "}— username cannot be changed.
+              </p>
+              <form onSubmit={saveEdit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Name *</label>
+                    <input
+                      type="text"
+                      name="fullName"
+                      value={editForm.fullName}
+                      onChange={handleEditInput}
+                      className={inputClass}
+                      placeholder="e.g., Alice Tan"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email *</label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={editForm.email}
+                      onChange={handleEditInput}
+                      className={inputClass}
+                      placeholder="user@example.com"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phone Number</label>
+                    <input
+                      type="tel"
+                      name="phoneNumber"
+                      value={editForm.phoneNumber}
+                      onChange={handleEditInput}
+                      className={inputClass}
+                      placeholder="08xxxxxxxxxx"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date of Birth</label>
+                    <input
+                      type="date"
+                      name="dateOfBirth"
+                      value={editForm.dateOfBirth}
+                      onChange={handleEditInput}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Gender</label>
+                    <select
+                      name="gender"
+                      value={editForm.gender}
+                      onChange={handleEditInput}
+                      className={`${inputClass} bg-white`}
+                    >
+                      <option value="">Prefer not to say</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Reset Password</label>
+                    <input
+                      type="password"
+                      name="newPassword"
+                      value={editForm.newPassword}
+                      onChange={handleEditInput}
+                      className={inputClass}
+                      autoComplete="new-password"
+                      placeholder="Leave blank to keep current"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Optional — at least 6 characters if set.</p>
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm shadow-sm disabled:opacity-50 flex-1"
+                  >
+                    {savingEdit ? "Saving..." : "Save Changes"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEdit}
+                    className="bg-slate-100 text-slate-700 px-6 py-2.5 rounded-lg hover:bg-slate-200 transition-colors font-semibold text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 

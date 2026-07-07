@@ -274,4 +274,69 @@ public class AdminController : ControllerBase
         await _db.SaveChangesAsync();
         return Ok(new { message = $"Category '{category.Name}' deleted." });
     }
+
+    // GET api/admin/users/{username}/overview — activity summary for a user account
+    [HttpGet("users/{username}/overview")]
+    public async Task<IActionResult> GetUserOverview(string username)
+    {
+        var user = _users.Find(username);
+        if (user is null)
+            return NotFound(new { message = "User not found." });
+
+        var userId = UserIdResolver.GetUserId(username);
+        var weekStart = WeekDateHelper.CurrentMonday();
+
+        var recipeCount = await _db.Recipes.CountAsync(r =>
+            r.OwnerName == user.FullName || r.UserId == userId);
+        var favoriteCount = await _db.FavoriteRecipes.CountAsync(f => f.Username == username);
+        var pantryCount = await _db.Pantries.CountAsync(p => p.UserId == userId);
+        var mealPlanCount = await _db.MealPlans.CountAsync(m =>
+            m.UserId == userId && m.WeekStartDate == weekStart);
+
+        var recentRecipes = await _db.Recipes
+            .Where(r => r.OwnerName == user.FullName || r.UserId == userId)
+            .OrderByDescending(r => r.Id)
+            .Take(5)
+            .Select(r => new { r.Id, r.Title, r.Category, r.ImageUrl })
+            .ToListAsync();
+
+        var favorites = await _db.FavoriteRecipes
+            .Where(f => f.Username == username)
+            .Include(f => f.Recipe)
+            .OrderByDescending(f => f.CreatedAt)
+            .Take(5)
+            .Select(f => new { f.RecipeId, f.Recipe.Title, f.Recipe.Category })
+            .ToListAsync();
+
+        var currentWeekPlan = await _db.MealPlans
+            .Where(m => m.UserId == userId && m.WeekStartDate == weekStart)
+            .Include(m => m.Recipe)
+            .Select(m => new { m.Day, m.MealSlot, RecipeTitle = m.Recipe.Title })
+            .ToListAsync();
+
+        return Ok(new
+        {
+            user = new
+            {
+                user.Username,
+                user.FullName,
+                user.Email,
+                user.Role,
+                user.IsActive,
+                user.CreatedAt
+            },
+            userId,
+            stats = new
+            {
+                recipeCount,
+                favoriteCount,
+                pantryCount,
+                mealPlanCount,
+                currentWeekLabel = WeekDateHelper.FormatLabel(weekStart)
+            },
+            recentRecipes,
+            favorites,
+            currentWeekPlan
+        });
+    }
 }

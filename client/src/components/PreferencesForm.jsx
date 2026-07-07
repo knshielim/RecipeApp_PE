@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { DIET_OPTIONS } from "../utils/dietLabels";
 
 const API = "http://localhost:5237";
 const USER_ID = 1;
@@ -13,6 +14,13 @@ const ALLERGY_OPTIONS = [
   "Soy",
   "Wheat",
   "Sesame",
+  "Gluten",
+  "Dairy",
+  "Corn",
+  "Mustard",
+  "Lupin",
+  "Mollusks",
+  "Sulfites",
 ];
 
 export default function PreferencesForm() {
@@ -83,11 +91,11 @@ export default function PreferencesForm() {
             onChange={(e) => setDietType(e.target.value)}
             className="input-field w-full text-sm"
           >
-            <option value="none">No Restriction</option>
-            <option value="vegetarian">Vegetarian</option>
-            <option value="vegan">Vegan</option>
-            <option value="halal">Halal</option>
-            <option value="keto">Keto</option>
+            {DIET_OPTIONS.map((diet) => (
+              <option key={diet.value} value={diet.value}>
+                {diet.label}
+              </option>
+            ))}
           </select>
         </div>
       </div>

@@ -6,9 +6,9 @@ public class Recipe
 
     public int UserId { get; set; }
 
-    // New ownership fields
-    public string OwnerUsername { get; set; } = "";
-    public string WriterUsername { get; set; } = "";
+    public string OwnerName { get; set; } = "";
+    public string DietRestriction { get; set; } = "";
+    public string Allergens { get; set; } = "";
 
     public string Title { get; set; } = "";
     public string Ingredients { get; set; } = "";

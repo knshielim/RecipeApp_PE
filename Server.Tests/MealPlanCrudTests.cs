@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Server.DTO;
+using Server.Models;
 using Xunit;
 
 namespace Server.Tests;
@@ -169,8 +170,8 @@ public class MealPlanCrudTests
         using var db = TestHelpers.NewDb();
         var mine = TestHelpers.AddRecipe(db, 1, "Stir Fry", "chicken, rice");
         var theirs = TestHelpers.AddRecipe(db, 2, "Other", "beef");
-        db.MealPlans.Add(new MealPlan { UserId = 1, Day = "Monday", MealSlot = "dinner", RecipeId = mine.Id });
-        db.MealPlans.Add(new MealPlan { UserId = 2, Day = "Monday", MealSlot = "dinner", RecipeId = theirs.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 1, WeekStartDate = TestHelpers.CurrentWeek, Day = "Monday", MealSlot = "dinner", RecipeId = mine.Id });
+        db.MealPlans.Add(new MealPlan { UserId = 2, WeekStartDate = TestHelpers.CurrentWeek, Day = "Monday", MealSlot = "dinner", RecipeId = theirs.Id });
         db.SaveChanges();
         var controller = TestHelpers.NewController(db);
 

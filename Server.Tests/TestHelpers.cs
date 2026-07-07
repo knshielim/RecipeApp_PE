@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Server.Models;
 using Server.Services;
 using ServerApi.Controllers;
 
@@ -37,5 +38,22 @@ public static class TestHelpers
         db.Recipes.Add(recipe);
         db.SaveChanges();
         return recipe;
+    }
+
+    public static DateOnly CurrentWeek => WeekDateHelper.CurrentMonday();
+
+    public static MealPlan AddMealPlan(AppDbContext db, int userId, string day, string slot, int recipeId, DateOnly? week = null)
+    {
+        var plan = new MealPlan
+        {
+            UserId = userId,
+            WeekStartDate = week ?? CurrentWeek,
+            Day = day,
+            MealSlot = slot,
+            RecipeId = recipeId
+        };
+        db.MealPlans.Add(plan);
+        db.SaveChanges();
+        return plan;
     }
 }

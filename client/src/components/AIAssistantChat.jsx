@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import PreferencesForm from "./PreferencesForm";
 import RecipePicker from "./RecipePicker";
+import { currentWeekStart, addWeeks, formatWeekLabel, formatWeekStart } from "../utils/weekUtils";
 
 const API = "http://localhost:5237";
 const USER_ID = 1; // TODO: replace with the real authenticated user id
@@ -52,7 +53,16 @@ export default function AIAssistantChat() {
   const [showMealPicker, setShowMealPicker] = useState(false);
   const [showCravingInput, setShowCravingInput] = useState(false);
   const [cravingInput, setCravingInput] = useState("");
+  const [selectedWeekOffset, setSelectedWeekOffset] = useState(0);
+  const [showWeekSelector, setShowWeekSelector] = useState(null);
   const chatEndRef = useRef(null);
+
+  const weekOptions = [
+    { offset: 0, label: "This week" },
+    { offset: 1, label: "Next week" },
+    { offset: 2, label: "Week after next" },
+    { offset: 3, label: "3 weeks from now" },
+  ];
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -132,9 +142,18 @@ export default function AIAssistantChat() {
   async function savePlan(plan, index) {
     setLoading(true);
     try {
-      await postJson(`/api/mealplans/${USER_ID}/apply-plan`, plan);
+      const weekStart = formatWeekStart(addWeeks(parseWeekStart(currentWeekStart()), selectedWeekOffset));
+      const res = await fetch(`${API}/api/mealplans/${USER_ID}/apply-plan?weekStart=${weekStart}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(plan),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to save plan");
       setMessages((prev) => prev.map((m, i) => (i === index ? { ...m, saved: true } : m)));
-      pushAssistant({ text: "Saved! Your meal planner page now has this week's plan. ✅" });
+      const weekLabel = formatWeekLabel(addWeeks(parseWeekStart(currentWeekStart()), selectedWeekOffset));
+      pushAssistant({ text: `Saved! Your meal planner page now has the plan for ${weekLabel}. ✅` });
+      setShowWeekSelector(null);
     } catch (err) {
       pushError(err);
     } finally {
@@ -187,7 +206,9 @@ export default function AIAssistantChat() {
         title: recipe.title,
         ingredients: recipe.ingredients,
         category: recipe.category,
-        imageUrl: "",
+        imageUrl: recipe.imageUrl || "",
+        dietRestriction: recipe.dietRestriction || "none",
+        allergens: recipe.allergens || "",
       });
       setMessages((prev) => prev.map((m, i) => (i === index ? { ...m, saved: true } : m)));
       pushAssistant({ text: `Saved "${recipe.title}" to your recipes. 📖` });
@@ -226,7 +247,7 @@ export default function AIAssistantChat() {
   ];
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
+    <div className="max-w-4xl mx-auto space-y-5">
       <div>
         <h1 className="section-title text-2xl">Recipe AI Assistant</h1>
         <p className="text-slate-500 text-sm mt-1">Get personalized meal suggestions and planning help.</p>
@@ -254,23 +275,55 @@ export default function AIAssistantChat() {
 
               {/* Save / regenerate a previewed weekly plan */}
               {m.role === "assistant" && m.plan && (
-                <div className="mt-1.5 flex gap-2 justify-start">
+                <div className="mt-1.5 flex gap-2 justify-start flex-wrap">
                   {!m.saved ? (
                     <>
-                      <button
-                        onClick={() => savePlan(m.plan, i)}
-                        disabled={loading}
-                        className="text-xs bg-green-600 text-white px-3 py-1 rounded-full disabled:opacity-50"
-                      >
-                        ✅ Save this plan
-                      </button>
-                      <button
-                        onClick={generateWeeklyPlan}
-                        disabled={loading}
-                        className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded-full disabled:opacity-50"
-                      >
-                        🔄 Regenerate
-                      </button>
+                      {showWeekSelector === i ? (
+                        <div className="flex gap-2 items-center">
+                          <select
+                            value={selectedWeekOffset}
+                            onChange={(e) => setSelectedWeekOffset(Number(e.target.value))}
+                            className="text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white"
+                          >
+                            {weekOptions.map((opt) => (
+                              <option key={opt.offset} value={opt.offset}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => savePlan(m.plan, i)}
+                            disabled={loading}
+                            className="text-xs bg-green-600 text-white px-3 py-1 rounded-full disabled:opacity-50"
+                          >
+                            ✅ Save
+                          </button>
+                          <button
+                            onClick={() => setShowWeekSelector(null)}
+                            disabled={loading}
+                            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded-full disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => setShowWeekSelector(i)}
+                            disabled={loading}
+                            className="text-xs bg-green-600 text-white px-3 py-1 rounded-full disabled:opacity-50"
+                          >
+                            ✅ Save this plan
+                          </button>
+                          <button
+                            onClick={generateWeeklyPlan}
+                            disabled={loading}
+                            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded-full disabled:opacity-50"
+                          >
+                            🔄 Regenerate
+                          </button>
+                        </>
+                      )}
                     </>
                   ) : (
                     <span className="text-xs text-green-700">Saved to your meal planner ✓</span>

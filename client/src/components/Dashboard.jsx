@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useSearch } from './layout/AppLayout';
-import { getFavoriteMeals, toggleFavoriteMeal } from '../utils/favoriteMeals';
+import { getFavoriteRecipes, addFavoriteRecipe, removeFavoriteRecipe } from '../api/recipes';
 import { isSearchActive } from '../utils/search';
 import { getCategoryGradient } from '../utils/recipeCategoryColors';
 import UserAvatar from './UserAvatar';
 import { useUserProfile } from '../context/UserProfileContext';
+import RecipeCard from './RecipeCard';
 
 const API = "http://localhost:5237";
 const USER_ID = 1;
@@ -45,17 +46,6 @@ const SITE_FEATURES = [
   },
 ];
 
-function StarRating() {
-  return (
-    <span className="inline-flex items-center gap-1 text-sm text-slate-500">
-      <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-amber-400">
-        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-      </svg>
-      4.7
-    </span>
-  );
-}
-
 export default function Dashboard({ username }) {
   const { searchQuery } = useSearch();
   const { displayName } = useUserProfile();
@@ -65,13 +55,21 @@ export default function Dashboard({ username }) {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState(null);
-  const [favoriteIds, setFavoriteIds] = useState(() =>
-    new Set(getFavoriteMeals(USER_ID).map((m) => m.id))
-  );
+  const [favoriteIds, setFavoriteIds] = useState(new Set());
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+    if (username) loadFavorites();
+  }, [username]);
+
+  async function loadFavorites() {
+    try {
+      const favorites = await getFavoriteRecipes(username);
+      setFavoriteIds(new Set(favorites.map((f) => f.id)));
+    } catch {
+      setFavoriteIds(new Set());
+    }
+  }
 
   const fetchDashboardData = async () => {
     try {
@@ -113,9 +111,23 @@ export default function Dashboard({ username }) {
 
   const isSearching = isSearchActive(searchQuery);
 
-  const handleToggleFavorite = (recipe) => {
-    toggleFavoriteMeal(USER_ID, recipe);
-    setFavoriteIds(new Set(getFavoriteMeals(USER_ID).map((m) => m.id)));
+  const handleToggleFavorite = async (recipe) => {
+    if (!username) return;
+    try {
+      if (favoriteIds.has(recipe.id)) {
+        await removeFavoriteRecipe(recipe.id, username);
+        setFavoriteIds((prev) => {
+          const next = new Set(prev);
+          next.delete(recipe.id);
+          return next;
+        });
+      } else {
+        await addFavoriteRecipe(recipe.id, username);
+        setFavoriteIds((prev) => new Set(prev).add(recipe.id));
+      }
+    } catch (err) {
+      console.error('Failed to update favourite:', err);
+    }
   };
 
   const eventCards = useMemo(() => {
@@ -273,54 +285,39 @@ export default function Dashboard({ username }) {
           </div>
 
           {filteredRecipes.length > 0 ? (
-            <div className="space-y-4">
+            <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredRecipes.map((recipe) => (
-                <article
+                <RecipeCard
                   key={recipe.id}
-                  className="soft-card flex gap-4 sm:gap-5 p-3 sm:p-4 hover:shadow-lg transition-shadow duration-200 relative"
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleToggleFavorite(recipe)}
-                    title={favoriteIds.has(recipe.id) ? 'Remove from favourites' : 'Add to favourites'}
-                    className="absolute top-3 right-3 sm:top-4 sm:right-4 w-9 h-9 rounded-full flex items-center justify-center bg-white/90 shadow-sm hover:scale-105 transition-transform"
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      className={`w-5 h-5 ${favoriteIds.has(recipe.id) ? 'fill-red-500 text-red-500' : 'fill-none text-slate-400'}`}
-                      stroke="currentColor"
-                      strokeWidth="1.75"
+                  recipe={recipe}
+                  detailPath={`/recipes/${recipe.id}`}
+                  favoriteButton={
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFavorite(recipe)}
+                      title={favoriteIds.has(recipe.id) ? 'Remove from favourites' : 'Add to favourites'}
+                      className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 w-9 h-9 rounded-full flex items-center justify-center bg-white/90 shadow-sm hover:scale-105 transition-transform"
                     >
-                      <path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-                  <div className={`w-28 h-28 sm:w-36 sm:h-36 shrink-0 rounded-2xl bg-gradient-to-br from-orange-100 to-amber-200 flex items-center justify-center`}>
-                    <span className="text-4xl sm:text-5xl">🍽️</span>
-                  </div>
-                  <div className="flex-1 min-w-0 flex flex-col justify-center py-1">
-                    <h3 className="font-bold text-slate-800 text-base sm:text-lg leading-snug">
-                      {recipe.title}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-sm text-slate-500">
-                      <StarRating />
-                      <span className="text-slate-300">|</span>
-                      <span>{recipe.category}</span>
-                      <span className="text-slate-300">|</span>
-                      <span>20 mins</span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1.5 truncate hidden sm:block">
-                      {recipe.ingredients}
-                    </p>
-                    <div className="flex items-center gap-2 mt-3">
-                      <UserAvatar size="xs" />
-                      <span className="text-xs text-slate-500">
-                        Upload by <span className="font-semibold text-slate-700">{displayName}</span>
-                      </span>
-                    </div>
-                  </div>
-                </article>
+                      <svg
+                        viewBox="0 0 24 24"
+                        className={`w-5 h-5 ${favoriteIds.has(recipe.id) ? 'fill-red-500 text-red-500' : 'fill-none text-slate-400'}`}
+                        stroke="currentColor"
+                        strokeWidth="1.75"
+                      >
+                        <path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  }
+                />
               ))}
             </div>
+            <div className="mt-4 text-center">
+              <Link to="/recipes" className="btn-primary inline-block text-sm">
+                View More Recipes
+              </Link>
+            </div>
+            </>
           ) : (
             <div className="soft-card p-10 text-center">
               <span className="text-5xl">🍳</span>
@@ -342,7 +339,7 @@ export default function Dashboard({ username }) {
         /* What you can do */
         <section>
           <h2 className="section-title mb-1">What can you do on our website?</h2>
-          <p className="text-sm text-slate-500 mb-4">Here&apos;s a quick guide to everything RecipeApp offers.</p>
+          <p className="text-sm text-slate-500 mb-4">Here&apos;s a quick guide to everything Nomly offers.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {SITE_FEATURES.map((feature) => (
               <div key={feature.title} className="soft-card p-5">

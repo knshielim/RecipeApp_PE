@@ -25,16 +25,19 @@ public class MealPlanController : ControllerBase
         _suggester = suggester;
     }
 
-    // GET api/mealplans/{userId} -- the user's full weekly plan with recipe info
+    // GET api/mealplans/{userId}?weekStart=2026-07-07
     [HttpGet("{userId:int}")]
-    public async Task<IActionResult> GetMealPlans(int userId)
+    public async Task<IActionResult> GetMealPlans(int userId, [FromQuery] string? weekStart = null)
     {
+        var week = WeekDateHelper.ParseOrCurrent(weekStart);
+
         var plans = await _db.MealPlans
-            .Where(m => m.UserId == userId)
+            .Where(m => m.UserId == userId && m.WeekStartDate == week)
             .Include(m => m.Recipe)
             .Select(m => new
             {
                 m.Id,
+                weekStartDate = m.WeekStartDate.ToString("yyyy-MM-dd"),
                 m.Day,
                 m.MealSlot,
                 m.RecipeId,
@@ -46,8 +49,7 @@ public class MealPlanController : ControllerBase
         return Ok(plans);
     }
 
-    // GET api/mealplans/recipes/{userId} -- all recipes available for planning
-    // (the dashboard endpoint only returns the 6 most recent, so we need our own)
+    // GET api/mealplans/recipes/{userId}
     [HttpGet("recipes/{userId:int}")]
     public async Task<IActionResult> GetRecipes(int userId)
     {
@@ -60,15 +62,17 @@ public class MealPlanController : ControllerBase
         return Ok(recipes);
     }
 
-    // POST api/mealplans -- assign a recipe to a day + meal slot
+    // POST api/mealplans
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] MealPlanRequestDTO request)
     {
-        var error = await ValidateRequest(request);
+        var week = WeekDateHelper.ParseOrCurrent(request.WeekStartDate);
+        var error = await ValidateRequest(request, week);
         if (error != null) return error;
 
         var occupied = await _db.MealPlans.AnyAsync(m =>
             m.UserId == request.UserId &&
+            m.WeekStartDate == week &&
             m.Day == request.Day &&
             m.MealSlot == request.MealSlot);
 
@@ -78,6 +82,7 @@ public class MealPlanController : ControllerBase
         var plan = new MealPlan
         {
             UserId = request.UserId,
+            WeekStartDate = week,
             Day = request.Day,
             MealSlot = request.MealSlot,
             RecipeId = request.RecipeId
@@ -86,10 +91,10 @@ public class MealPlanController : ControllerBase
         _db.MealPlans.Add(plan);
         await _db.SaveChangesAsync();
 
-        return Ok(new { plan.Id, plan.Day, plan.MealSlot, plan.RecipeId });
+        return Ok(new { plan.Id, weekStartDate = week.ToString("yyyy-MM-dd"), plan.Day, plan.MealSlot, plan.RecipeId });
     }
 
-    // PUT api/mealplans/{id} -- change the recipe/day/slot of an existing entry
+    // PUT api/mealplans/{id}
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] MealPlanRequestDTO request)
     {
@@ -97,26 +102,28 @@ public class MealPlanController : ControllerBase
         if (plan == null)
             return NotFound(new { message = "Meal plan entry not found." });
 
-        var error = await ValidateRequest(request);
+        var week = WeekDateHelper.ParseOrCurrent(request.WeekStartDate ?? plan.WeekStartDate.ToString("yyyy-MM-dd"));
+        var error = await ValidateRequest(request, week);
         if (error != null) return error;
 
-        // Moving onto a day+slot already used by a DIFFERENT entry is a conflict
         var occupied = await _db.MealPlans.AnyAsync(m =>
             m.Id != id &&
             m.UserId == request.UserId &&
+            m.WeekStartDate == week &&
             m.Day == request.Day &&
             m.MealSlot == request.MealSlot);
 
         if (occupied)
             return Conflict(new { message = $"{request.Day} {request.MealSlot} already has a meal planned." });
 
+        plan.WeekStartDate = week;
         plan.Day = request.Day;
         plan.MealSlot = request.MealSlot;
         plan.RecipeId = request.RecipeId;
 
         await _db.SaveChangesAsync();
 
-        return Ok(new { plan.Id, plan.Day, plan.MealSlot, plan.RecipeId });
+        return Ok(new { plan.Id, weekStartDate = week.ToString("yyyy-MM-dd"), plan.Day, plan.MealSlot, plan.RecipeId });
     }
 
     // DELETE api/mealplans/{id}
@@ -133,21 +140,18 @@ public class MealPlanController : ControllerBase
         return Ok(new { message = "Meal plan entry deleted." });
     }
 
-    // GET api/mealplans/{userId}/grocery-list
-    // Aggregates the ingredients of every recipe in the user's weekly plan.
-    // Recipe.Ingredients is a comma-separated string; where an entry embeds a
-    // quantity (e.g. "200 g rice" / "2 eggs") quantities with the same unit are
-    // summed, otherwise duplicates are counted as occurrences.
+    // GET api/mealplans/{userId}/grocery-list?weekStart=2026-07-07
     [HttpGet("{userId:int}/grocery-list")]
-    public async Task<IActionResult> GetGroceryList(int userId)
+    public async Task<IActionResult> GetGroceryList(int userId, [FromQuery] string? weekStart = null)
     {
+        var week = WeekDateHelper.ParseOrCurrent(weekStart);
+
         var plannedRecipes = await _db.MealPlans
-            .Where(m => m.UserId == userId)
+            .Where(m => m.UserId == userId && m.WeekStartDate == week)
             .Include(m => m.Recipe)
             .Select(m => m.Recipe)
             .ToListAsync();
 
-        // key: ingredient name (lowercase) + unit -> aggregated entry
         var aggregated = new Dictionary<string, GroceryItem>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var recipe in plannedRecipes)
@@ -183,25 +187,27 @@ public class MealPlanController : ControllerBase
             .Select(i => new
             {
                 name = i.Name,
-                // Only meaningful when the recipe text embedded quantities;
-                // otherwise quantity == occurrences (each mention counted once).
                 quantity = i.Quantity,
                 unit = i.Unit,
-                occurrences = i.Occurrences
+                occurrences = i.Occurrences,
+                hasUnit = !string.IsNullOrWhiteSpace(i.Unit)
             })
             .ToList();
 
-        return Ok(new { totalRecipes = plannedRecipes.Count, items });
+        return Ok(new
+        {
+            weekStartDate = week.ToString("yyyy-MM-dd"),
+            totalRecipes = plannedRecipes.Count,
+            items
+        });
     }
 
-    // POST api/mealplans/{userId}/auto-generate
-    // Uses AI (with a deterministic fallback) to fill the entire week with
-    // recipes matching the user's stored diet/goal/allergy preferences.
-    // Replaces the user's existing weekly plan; individual entries remain
-    // editable through the normal CRUD endpoints afterwards.
+    // POST api/mealplans/{userId}/auto-generate?weekStart=2026-07-07
     [HttpPost("{userId:int}/auto-generate")]
-    public async Task<IActionResult> AutoGenerate(int userId)
+    public async Task<IActionResult> AutoGenerate(int userId, [FromQuery] string? weekStart = null)
     {
+        var week = WeekDateHelper.ParseOrCurrent(weekStart);
+
         var recipes = await _db.Recipes.Where(r => r.UserId == userId).ToListAsync();
         if (recipes.Count == 0)
             return BadRequest(new { message = "You have no saved recipes to plan with." });
@@ -209,19 +215,22 @@ public class MealPlanController : ControllerBase
         var prefs = await _db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
 
         var suggestions = await _suggester.SuggestWeekAsync(recipes, prefs);
-        var week = AutoPlanBuilder.BuildWeek(recipes, prefs, suggestions);
+        var weekPlan = AutoPlanBuilder.BuildWeek(recipes, prefs, suggestions);
 
-        if (week.Count == 0)
+        if (weekPlan.Count == 0)
             return BadRequest(new { message = "None of your recipes match your dietary preferences and allergies." });
 
-        var existing = await _db.MealPlans.Where(m => m.UserId == userId).ToListAsync();
+        var existing = await _db.MealPlans
+            .Where(m => m.UserId == userId && m.WeekStartDate == week)
+            .ToListAsync();
         _db.MealPlans.RemoveRange(existing);
 
-        foreach (var entry in week)
+        foreach (var entry in weekPlan)
         {
             _db.MealPlans.Add(new MealPlan
             {
                 UserId = userId,
+                WeekStartDate = week,
                 Day = entry.Day,
                 MealSlot = entry.MealSlot,
                 RecipeId = entry.RecipeId
@@ -230,20 +239,22 @@ public class MealPlanController : ControllerBase
 
         await _db.SaveChangesAsync();
 
-        return Ok(new { message = $"Generated a plan for {week.Count} meal slots.", slots = week.Count });
+        return Ok(new
+        {
+            message = $"Generated a plan for {weekPlan.Count} meal slots.",
+            weekStartDate = week.ToString("yyyy-MM-dd"),
+            slots = weekPlan.Count
+        });
     }
 
-    // POST api/mealplans/{userId}/apply-plan
-    // Persists an exact weekly plan the user has already reviewed and
-    // approved — e.g. the preview shown by the AI assistant's "Generate
-    // weekly plan" action. Every entry is re-validated against this user's
-    // own saved recipes before anything is written, and this replaces
-    // whatever weekly plan the user already had.
+    // POST api/mealplans/{userId}/apply-plan?weekStart=2026-07-07
     [HttpPost("{userId:int}/apply-plan")]
-    public async Task<IActionResult> ApplyPlan(int userId, [FromBody] List<PlanEntryDTO> entries)
+    public async Task<IActionResult> ApplyPlan(int userId, [FromBody] List<PlanEntryDTO> entries, [FromQuery] string? weekStart = null)
     {
         if (entries == null || entries.Count == 0)
             return BadRequest(new { message = "No plan entries provided." });
+
+        var week = WeekDateHelper.ParseOrCurrent(weekStart);
 
         var userRecipeIds = (await _db.Recipes
             .Where(r => r.UserId == userId)
@@ -260,26 +271,38 @@ public class MealPlanController : ControllerBase
             var slot = ValidSlots.FirstOrDefault(s => s.Equals(entry.MealSlot, StringComparison.OrdinalIgnoreCase));
             if (day == null || slot == null) continue;
             if (!userRecipeIds.Contains(entry.RecipeId)) continue;
-            if (!seen.Add((day, slot))) continue; // first entry per slot wins
+            if (!seen.Add((day, slot))) continue;
 
-            toSave.Add(new MealPlan { UserId = userId, Day = day, MealSlot = slot, RecipeId = entry.RecipeId });
+            toSave.Add(new MealPlan
+            {
+                UserId = userId,
+                WeekStartDate = week,
+                Day = day,
+                MealSlot = slot,
+                RecipeId = entry.RecipeId
+            });
         }
 
         if (toSave.Count == 0)
             return BadRequest(new { message = "None of the plan entries were valid for this user." });
 
-        var existing = await _db.MealPlans.Where(m => m.UserId == userId).ToListAsync();
+        var existing = await _db.MealPlans
+            .Where(m => m.UserId == userId && m.WeekStartDate == week)
+            .ToListAsync();
         _db.MealPlans.RemoveRange(existing);
         _db.MealPlans.AddRange(toSave);
 
         await _db.SaveChangesAsync();
 
-        return Ok(new { message = $"Saved your weekly plan ({toSave.Count} meal slots).", slots = toSave.Count });
+        return Ok(new
+        {
+            message = $"Saved your weekly plan ({toSave.Count} meal slots).",
+            weekStartDate = week.ToString("yyyy-MM-dd"),
+            slots = toSave.Count
+        });
     }
 
-    // ---------- helpers ----------
-
-    private async Task<IActionResult?> ValidateRequest(MealPlanRequestDTO request)
+    private async Task<IActionResult?> ValidateRequest(MealPlanRequestDTO request, DateOnly week)
     {
         if (!ValidDays.Contains(request.Day))
             return BadRequest(new { message = "Day must be a valid weekday name (Monday–Sunday)." });
@@ -294,8 +317,6 @@ public class MealPlanController : ControllerBase
         return null;
     }
 
-    // Matches an optional leading quantity + optional unit, e.g.
-    // "200 g rice" -> (rice, 200, g) | "2 eggs" -> (eggs, 2, "") | "rice" -> (rice, 1, "")
     private static readonly Regex QuantityPattern = new(
         @"^(?<qty>\d+(\.\d+)?)\s*(?<unit>g|kg|ml|l|cup|cups|tbsp|tsp|oz|lb|pieces?|cloves?|slices?)?\s+(?<name>.+)$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -322,4 +343,5 @@ public class MealPlanController : ControllerBase
         public int Occurrences { get; set; }
     }
 }
+
 public record PlanEntryDTO(string Day, string MealSlot, int RecipeId);

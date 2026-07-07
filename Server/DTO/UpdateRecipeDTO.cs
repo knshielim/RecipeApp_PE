@@ -6,5 +6,7 @@ public class UpdateRecipeDTO
     public string Ingredients { get; set; } = string.Empty;
     public string Steps { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
+    public string DietRestriction { get; set; } = string.Empty;
+    public string Allergens { get; set; } = "";
     public string ImageUrl { get; set; } = string.Empty;
 }

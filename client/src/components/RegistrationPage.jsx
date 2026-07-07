@@ -70,7 +70,7 @@ function RegistrationPage({ onGoToLogin }) {
             R
           </span>
           <span className="font-semibold text-lg text-slate-900 tracking-tight">
-            RecipeApp Portal
+            Nomly Portal
           </span>
         </div>
 
@@ -218,7 +218,7 @@ function RegistrationPage({ onGoToLogin }) {
             </p>
           )}
 
-          {/* Mengubah tombol pendaftaran menggunakan tema warna RecipeApp */}
+          {/* Mengubah tombol pendaftaran menggunakan tema warna Nomly */}
           <button
             type="submit"
             disabled={loading}

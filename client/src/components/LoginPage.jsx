@@ -72,7 +72,7 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
                 R
               </span>
               <span className="font-semibold text-lg tracking-tight">
-                RecipeApp
+                Nomly
               </span>
             </div>
             <h1 className="font-bold text-3xl leading-tight mt-12">

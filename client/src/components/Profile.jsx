@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { getFavoriteMeals, removeFavoriteMeal } from '../utils/favoriteMeals';
+import { getFavoriteRecipes, removeFavoriteRecipe } from '../api/recipes';
 import { useUserProfile } from '../context/UserProfileContext';
 import { useSearch } from './layout/AppLayout';
 import { matchesSearch, isSearchActive } from '../utils/search';
+import RecipeCard from './RecipeCard';
 import UserAvatar from './UserAvatar';
 import { resizeImageFile } from '../utils/profilePicture';
 
@@ -33,9 +34,18 @@ export default function Profile({ token, username }) {
   useEffect(() => {
     fetchProfileData();
     fetchAccount();
-    setFavoriteMeals(getFavoriteMeals(USER_ID));
+    if (username) loadFavorites();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [username]);
+
+  async function loadFavorites() {
+    try {
+      const data = await getFavoriteRecipes(username);
+      setFavoriteMeals(data);
+    } catch {
+      setFavoriteMeals([]);
+    }
+  }
 
   const fetchAccount = async () => {
     try {
@@ -129,8 +139,13 @@ export default function Profile({ token, username }) {
     }
   };
 
-  const handleRemoveFavorite = (recipeId) => {
-    setFavoriteMeals(removeFavoriteMeal(USER_ID, recipeId));
+  const handleRemoveFavorite = async (recipeId) => {
+    try {
+      await removeFavoriteRecipe(recipeId, username);
+      setFavoriteMeals((prev) => prev.filter((m) => m.id !== recipeId));
+    } catch (err) {
+      console.error('Failed to remove favourite:', err);
+    }
   };
 
   const handlePicturePick = async (e) => {
@@ -271,140 +286,40 @@ export default function Profile({ token, username }) {
             <div className="soft-card p-6 sm:p-8">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="section-title">Account Information</h2>
-                {!editingAccount && (
-                  <button
-                    onClick={() => { setEditingAccount(true); setAccountStatus({ type: '', msg: '' }); }}
-                    className="btn-primary text-sm"
-                  >
-                    Edit Profile
-                  </button>
-                )}
+                <button
+                  onClick={() => { setEditingAccount(true); setAccountStatus({ type: '', msg: '' }); }}
+                  className="btn-primary text-sm"
+                >
+                  Edit Profile
+                </button>
               </div>
 
-              {accountStatus.msg && (
-                <p className={`text-sm font-medium p-3 rounded-lg mb-5 ${
-                  accountStatus.type === 'success'
-                    ? 'text-emerald-700 bg-emerald-50 border border-emerald-100'
-                    : 'text-red-600 bg-red-50 border border-red-100'
-                }`}>
-                  {accountStatus.msg}
-                </p>
-              )}
-
-              {!editingAccount ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
-                  <div>
-                    <p className="text-sm text-slate-500">Username</p>
-                    <p className="font-semibold text-slate-900 mt-0.5">{account?.username || username || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Full Name</p>
-                    <p className="font-semibold text-slate-900 mt-0.5">{account?.fullName || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Email</p>
-                    <p className="font-semibold text-slate-900 mt-0.5">{account?.email || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Phone Number</p>
-                    <p className="font-semibold text-slate-900 mt-0.5">{account?.phoneNumber || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Date of Birth</p>
-                    <p className="font-semibold text-slate-900 mt-0.5">{account?.dateOfBirth ? formatDate(account.dateOfBirth) : '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Gender</p>
-                    <p className="font-semibold text-slate-900 mt-0.5">{account?.gender || '—'}</p>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+                <div>
+                  <p className="text-sm text-slate-500">Username</p>
+                  <p className="font-semibold text-slate-900 mt-0.5">{account?.username || username || '—'}</p>
                 </div>
-              ) : (
-                <form onSubmit={handleAccountSave} className="space-y-5">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Username</label>
-                      <input
-                        type="text"
-                        value={account?.username || username || ''}
-                        disabled
-                        className="w-full border border-slate-200 bg-slate-50 text-slate-500 rounded-lg px-4 py-3 cursor-not-allowed"
-                      />
-                      <p className="text-xs text-slate-400 mt-1">Username cannot be changed.</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name *</label>
-                      <input
-                        type="text"
-                        name="fullName"
-                        value={accountForm.fullName}
-                        onChange={handleAccountInput}
-                        className="input-field w-full"
-                        placeholder="e.g., Alice Tan"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Email *</label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={accountForm.email}
-                        onChange={handleAccountInput}
-                        className="input-field w-full"
-                        placeholder="you@example.com"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Phone Number</label>
-                      <input
-                        type="tel"
-                        name="phoneNumber"
-                        value={accountForm.phoneNumber}
-                        onChange={handleAccountInput}
-                        className="input-field w-full"
-                        placeholder="08xxxxxxxxxx"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Date of Birth</label>
-                      <input
-                        type="date"
-                        name="dateOfBirth"
-                        value={accountForm.dateOfBirth}
-                        onChange={handleAccountInput}
-                        className="input-field w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Gender</label>
-                      <select
-                        name="gender"
-                        value={accountForm.gender}
-                        onChange={handleAccountInput}
-                        className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all bg-white"
-                      >
-                        <option value="">Prefer not to say</option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <button type="submit" disabled={savingAccount} className="btn-primary disabled:opacity-50">
-                      {savingAccount ? 'Saving...' : 'Save Changes'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAccountCancel}
-                      className="bg-slate-100 text-slate-700 px-6 py-2.5 rounded-full hover:bg-slate-200 transition-colors font-semibold"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              )}
+                <div>
+                  <p className="text-sm text-slate-500">Full Name</p>
+                  <p className="font-semibold text-slate-900 mt-0.5">{account?.fullName || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Email</p>
+                  <p className="font-semibold text-slate-900 mt-0.5">{account?.email || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Phone Number</p>
+                  <p className="font-semibold text-slate-900 mt-0.5">{account?.phoneNumber || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Date of Birth</p>
+                  <p className="font-semibold text-slate-900 mt-0.5">{account?.dateOfBirth ? formatDate(account.dateOfBirth) : '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Gender</p>
+                  <p className="font-semibold text-slate-900 mt-0.5">{account?.gender || '—'}</p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -420,42 +335,22 @@ export default function Profile({ token, username }) {
               </div>
 
               {filteredFavoriteMeals.length > 0 ? (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {filteredFavoriteMeals.map((meal) => (
-                    <div
-                      key={meal.id}
-                      className="border border-slate-100 rounded-2xl p-5 flex justify-between items-start bg-white hover:shadow-md transition-all"
-                    >
-                      <div className="flex gap-4 flex-1 min-w-0">
-                        <div className="w-14 h-14 shrink-0 rounded-xl bg-gradient-to-br from-orange-100 to-amber-200 flex items-center justify-center text-2xl">
-                          ❤️
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <h3 className="font-bold text-slate-900 text-lg">{meal.title}</h3>
-                            {meal.category && (
-                              <span className="text-xs font-semibold bg-brand-light text-brand px-3 py-1 rounded-full">
-                                {meal.category}
-                              </span>
-                            )}
-                          </div>
-                          {meal.ingredients && (
-                            <p className="text-sm text-slate-500 truncate">{meal.ingredients}</p>
-                          )}
-                          {meal.addedAt && (
-                            <p className="text-xs text-slate-400 mt-1">
-                              Saved {formatDate(meal.addedAt)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleRemoveFavorite(meal.id)}
-                        title="Remove from favourites"
-                        className="text-red-500 hover:text-red-700 font-semibold text-sm px-3 py-1 rounded-lg hover:bg-red-50 transition-colors shrink-0"
-                      >
-                        Remove
-                      </button>
+                    <div key={meal.id} className="relative">
+                      <RecipeCard
+                        recipe={meal}
+                        detailPath={`/recipes/${meal.id}`}
+                        favoriteButton={
+                          <button
+                            onClick={() => handleRemoveFavorite(meal.id)}
+                            title="Remove from favourites"
+                            className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full flex items-center justify-center bg-red-500/90 text-white shadow-sm hover:bg-red-600 transition-colors"
+                          >
+                            <span className="text-lg">★</span>
+                          </button>
+                        }
+                      />
                     </div>
                   ))}
                 </div>
@@ -561,6 +456,122 @@ export default function Profile({ token, username }) {
           </div>
         )}
       </div>
+
+      {/* Edit Profile Modal */}
+      {editingAccount && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="soft-card p-6 sm:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-slate-800">Edit Profile</h2>
+              <button
+                onClick={handleAccountCancel}
+                className="text-slate-400 hover:text-slate-600 p-1"
+                aria-label="Close"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                  <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+
+            {accountStatus.msg && (
+              <p className={`text-sm font-medium p-3 rounded-lg mb-5 ${
+                accountStatus.type === 'success'
+                  ? 'text-emerald-700 bg-emerald-50 border border-emerald-100'
+                  : 'text-red-600 bg-red-50 border border-red-100'
+              }`}>
+                {accountStatus.msg}
+              </p>
+            )}
+
+            <form onSubmit={handleAccountSave} className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Username</label>
+                  <input
+                    type="text"
+                    value={account?.username || username || ''}
+                    disabled
+                    className="w-full border border-slate-200 bg-slate-50 text-slate-500 rounded-lg px-4 py-3 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Username cannot be changed.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name *</label>
+                  <input
+                    type="text"
+                    name="fullName"
+                    value={accountForm.fullName}
+                    onChange={handleAccountInput}
+                    className="input-field w-full"
+                    placeholder="e.g., Alice Tan"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Email *</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={accountForm.email}
+                    onChange={handleAccountInput}
+                    className="input-field w-full"
+                    placeholder="you@example.com"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Phone Number</label>
+                  <input
+                    type="tel"
+                    name="phoneNumber"
+                    value={accountForm.phoneNumber}
+                    onChange={handleAccountInput}
+                    className="input-field w-full"
+                    placeholder="08xxxxxxxxxx"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Date of Birth</label>
+                  <input
+                    type="date"
+                    name="dateOfBirth"
+                    value={accountForm.dateOfBirth}
+                    onChange={handleAccountInput}
+                    className="input-field w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Gender</label>
+                  <select
+                    name="gender"
+                    value={accountForm.gender}
+                    onChange={handleAccountInput}
+                    className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition-all bg-white"
+                  >
+                    <option value="">Prefer not to say</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-4 pt-2">
+                <button type="submit" disabled={savingAccount} className="btn-primary disabled:opacity-50 flex-1">
+                  {savingAccount ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAccountCancel}
+                  className="bg-slate-100 text-slate-700 px-6 py-2.5 rounded-full hover:bg-slate-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

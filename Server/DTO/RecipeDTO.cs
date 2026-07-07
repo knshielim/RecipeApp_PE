@@ -5,8 +5,9 @@ public class RecipeDTO
     public int Id { get; set; }
     public int UserId { get; set; }
 
-    public string OwnerUsername { get; set; } = string.Empty;
-    public string WriterUsername { get; set; } = string.Empty;
+    public string OwnerName { get; set; } = string.Empty;
+    public string DietRestriction { get; set; } = string.Empty;
+    public string Allergens { get; set; } = string.Empty;
 
     public string Title { get; set; } = string.Empty;
     public string Ingredients { get; set; } = string.Empty;

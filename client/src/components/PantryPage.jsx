@@ -31,6 +31,7 @@ export default function PantryPage() {
   const { searchQuery } = useSearch();
   const [pantryItems, setPantryItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [formData, setFormData] = useState({
     ingredientName: '',
     category: 'Vegetables',
@@ -165,11 +166,20 @@ export default function PantryPage() {
   };
 
   const filteredPantryItems = useMemo(() => {
-    if (!searchQuery.trim()) return pantryItems;
-    return pantryItems.filter((item) =>
-      matchesSearch(searchQuery, item.ingredientName, item.category, item.unit)
-    );
-  }, [pantryItems, searchQuery]);
+    let items = pantryItems;
+    
+    if (searchQuery.trim()) {
+      items = items.filter((item) =>
+        matchesSearch(searchQuery, item.ingredientName, item.category, item.unit)
+      );
+    }
+    
+    if (categoryFilter) {
+      items = items.filter((item) => item.category === categoryFilter);
+    }
+    
+    return items;
+  }, [pantryItems, searchQuery, categoryFilter]);
 
   const isSearching = isSearchActive(searchQuery);
   const expiringCount = pantryItems.filter((i) => isExpiringSoon(i.expiryDate) && !isExpired(i.expiryDate)).length;
@@ -210,62 +220,104 @@ export default function PantryPage() {
       )}
 
       <div className="soft-card p-6 sm:p-8">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h2 className="section-title">{isSearching ? 'Search Results' : 'Ingredients'}</h2>
-          <div className="flex items-center gap-2 sm:gap-3">
-            {isSearching ? (
-              <span className="text-sm text-slate-500">
-                {filteredPantryItems.length} match{filteredPantryItems.length !== 1 ? 'es' : ''}
-              </span>
-            ) : (
-              <>
-                <button
-                  onClick={openAddModal}
-                  title="Add pantry item"
-                  className="w-10 h-10 flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark transition-colors shadow-sm"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-5 h-5">
-                    <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => { setShowScanner((v) => !v); setShowDetector(false); }}
-                  title="Scan a grocery receipt"
-                  className="w-10 h-10 flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark transition-colors shadow-sm text-lg"
-                >
-                  🧾
-                </button>
-                <button
-                  onClick={() => { setShowDetector((v) => !v); setShowScanner(false); }}
-                  title="Detect items from a photo"
-                  className="w-10 h-10 flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark transition-colors shadow-sm text-lg"
-                >
-                  📷
-                </button>
-              </>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+            {!isSearching && (
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="input-field text-sm w-full sm:w-auto"
+              >
+                <option value="">All Categories</option>
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             )}
+            <div className="flex items-center gap-2 sm:gap-3">
+              {isSearching ? (
+                <span className="text-sm text-slate-500">
+                  {filteredPantryItems.length} match{filteredPantryItems.length !== 1 ? 'es' : ''}
+                </span>
+              ) : (
+                <>
+                  <button
+                    onClick={openAddModal}
+                    title="Add pantry item"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark transition-colors shadow-sm"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-5 h-5">
+                      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => { setShowScanner((v) => !v); setShowDetector(false); }}
+                    title="Scan a grocery receipt"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark transition-colors shadow-sm text-lg"
+                  >
+                    🧾
+                  </button>
+                  <button
+                    onClick={() => { setShowDetector((v) => !v); setShowScanner(false); }}
+                    title="Detect items from a photo"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark transition-colors shadow-sm text-lg"
+                  >
+                    📷
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        {!isSearching && showScanner && (
-          <div className="mb-6">
-            <PantryScanner
-              onAdded={() => {
-                fetchPantryItems();
-                setShowScanner(false);
-              }}
-            />
+        {showScanner && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+            <div className="soft-card p-6 sm:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="section-title text-xl">Scan Grocery Receipt</h2>
+                <button
+                  onClick={() => setShowScanner(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                  aria-label="Close"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <PantryScanner
+                onAdded={() => {
+                  fetchPantryItems();
+                  setShowScanner(false);
+                }}
+              />
+            </div>
           </div>
         )}
 
-        {!isSearching && showDetector && (
-          <div className="mb-6">
-            <PantryObjectDetector
-              onAdded={() => {
-                fetchPantryItems();
-                setShowDetector(false);
-              }}
-            />
+        {showDetector && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+            <div className="soft-card p-6 sm:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="section-title text-xl">Detect Items from Photo</h2>
+                <button
+                  onClick={() => setShowDetector(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                  aria-label="Close"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <PantryObjectDetector
+                onAdded={() => {
+                  fetchPantryItems();
+                  setShowDetector(false);
+                }}
+              />
+            </div>
           </div>
         )}
 

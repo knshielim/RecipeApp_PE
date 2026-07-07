@@ -10,6 +10,13 @@ import {
 import GroceryList from "./GroceryList";
 import { useSearch } from "./layout/AppLayout";
 import { matchesSearch, isSearchActive } from "../utils/search";
+import {
+  currentWeekStart,
+  parseWeekStart,
+  addWeeks,
+  formatWeekLabel,
+  formatWeekStart,
+} from "../utils/weekUtils";
 
 const USER_ID = 1;
 
@@ -18,6 +25,8 @@ const SLOTS = ["breakfast", "lunch", "dinner"];
 
 export default function MealPlanner() {
   const { searchQuery } = useSearch();
+  const [weekStart, setWeekStart] = useState(currentWeekStart());
+  const [weekOffset, setWeekOffset] = useState(0);
   const [plans, setPlans] = useState([]);
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,14 +43,20 @@ export default function MealPlanner() {
   const [searchHasGroceryResults, setSearchHasGroceryResults] = useState(false);
 
   useEffect(() => {
+    const base = parseWeekStart(currentWeekStart());
+    const target = addWeeks(base, weekOffset);
+    setWeekStart(formatWeekStart(target));
+  }, [weekOffset]);
+
+  useEffect(() => {
     fetchData();
-  }, []);
+  }, [weekStart]);
 
   async function fetchData() {
     setLoading(true);
     try {
       const [planData, recipeData] = await Promise.all([
-        getMealPlans(USER_ID),
+        getMealPlans(USER_ID, weekStart),
         getRecipes(USER_ID),
       ]);
       setPlans(planData);
@@ -90,6 +105,7 @@ export default function MealPlanner() {
       mealSlot: slot,
       planId: existing ? existing.id : null,
       recipeId: existing ? String(existing.recipeId) : "",
+      weekStartDate: existing ? existing.weekStartDate : weekStart,
     });
   }
 
@@ -124,6 +140,7 @@ export default function MealPlanner() {
     try {
       const payload = {
         userId: USER_ID,
+        weekStartDate: form.weekStartDate,
         day: form.day,
         mealSlot: form.mealSlot,
         recipeId: Number(form.recipeId),
@@ -162,7 +179,7 @@ export default function MealPlanner() {
     setGenerating(true);
     setGenerateError("");
     try {
-      await autoGenerateWeek(USER_ID);
+      await autoGenerateWeek(USER_ID, weekStart);
       await fetchData();
     } catch (err) {
       setGenerateError(err.message || "Failed to generate the weekly plan.");
@@ -201,8 +218,37 @@ export default function MealPlanner() {
       {showPlannerSection && (
       /* Weekly grid */
       <div className="soft-card p-6 sm:p-8 overflow-x-auto">
-        <div className="flex justify-between items-center mb-5">
-          <h2 className="section-title">{isSearching ? 'Search Results' : 'This Week'}</h2>
+        <div className="flex justify-between items-center mb-5 flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setWeekOffset((o) => o - 1)}
+              className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm font-medium"
+              title="Previous week"
+            >
+              ←
+            </button>
+            <div>
+              <h2 className="section-title">{isSearching ? "Search Results" : formatWeekLabel(parseWeekStart(weekStart))}</h2>
+              {weekOffset === 0 && !isSearching && (
+                <p className="text-xs text-brand font-medium">This week</p>
+              )}
+            </div>
+            <button
+              onClick={() => setWeekOffset((o) => o + 1)}
+              className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm font-medium"
+              title="Next week"
+            >
+              →
+            </button>
+            {weekOffset !== 0 && !isSearching && (
+              <button
+                onClick={() => setWeekOffset(0)}
+                className="text-xs text-brand font-medium hover:underline ml-1"
+              >
+                Back to this week
+              </button>
+            )}
+          </div>
           {!isSearching && (
           <button
             onClick={() => setConfirmGenerate(true)}
@@ -305,7 +351,7 @@ export default function MealPlanner() {
       )}
 
       {/* Grocery list */}
-      <GroceryList onSearchResultsChange={setSearchHasGroceryResults} />
+      <GroceryList weekStart={weekStart} onSearchResultsChange={setSearchHasGroceryResults} />
 
       {/* Auto-generate confirmation */}
       {confirmGenerate && (
