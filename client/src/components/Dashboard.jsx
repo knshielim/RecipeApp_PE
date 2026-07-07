@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useSearch } from './layout/AppLayout';
-import { getFavoriteRecipes, addFavoriteRecipe, removeFavoriteRecipe } from '../api/recipes';
+import { getFavoriteRecipes, addFavoriteRecipe, removeFavoriteRecipe, getRecipes } from '../api/recipes';
 import { isSearchActive } from '../utils/search';
 import { getCategoryGradient } from '../utils/recipeCategoryColors';
+import { getRecipeCategoryNames, recipeMatchesCategory } from '../utils/recipeCategories';
 import UserAvatar from './UserAvatar';
 import { useUserProfile } from '../context/UserProfileContext';
 import RecipeCard from './RecipeCard';
@@ -50,6 +51,8 @@ export default function Dashboard({ username }) {
   const { searchQuery } = useSearch();
   const { displayName } = useUserProfile();
   const [recentRecipes, setRecentRecipes] = useState([]);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [weeklyPlan, setWeeklyPlan] = useState([]);
   const [stats, setStats] = useState({ totalMealPlans: 0 });
   const [categories, setCategories] = useState([]);
@@ -61,6 +64,33 @@ export default function Dashboard({ username }) {
     fetchDashboardData();
     if (username) loadFavorites();
   }, [username]);
+
+  useEffect(() => {
+    if (!isSearchActive(searchQuery)) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const data = await getRecipes(searchQuery.trim(), '');
+        if (!cancelled) setSearchResults(data);
+      } catch (error) {
+        console.error('Error searching recipes:', error);
+        if (!cancelled) setSearchResults([]);
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
 
   async function loadFavorites() {
     try {
@@ -91,23 +121,12 @@ export default function Dashboard({ username }) {
   };
 
   const filteredRecipes = useMemo(() => {
-    let list = recentRecipes;
+    let list = isSearchActive(searchQuery) ? searchResults : recentRecipes;
     if (activeCategory && !isSearchActive(searchQuery)) {
-      list = list.filter((r) =>
-        r.category?.toLowerCase().includes(activeCategory.toLowerCase())
-      );
-    }
-    if (isSearchActive(searchQuery)) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (r) =>
-          r.title?.toLowerCase().includes(q) ||
-          r.category?.toLowerCase().includes(q) ||
-          r.ingredients?.toLowerCase().includes(q)
-      );
+      list = list.filter((r) => recipeMatchesCategory(r, activeCategory));
     }
     return list;
-  }, [recentRecipes, activeCategory, searchQuery]);
+  }, [recentRecipes, searchResults, activeCategory, searchQuery]);
 
   const isSearching = isSearchActive(searchQuery);
 
@@ -160,8 +179,14 @@ export default function Dashboard({ username }) {
   const categoryChartData = useMemo(() => {
     const counts = {};
     recentRecipes.forEach((r) => {
-      const cat = r.category || 'Other';
-      counts[cat] = (counts[cat] || 0) + 1;
+      const names = getRecipeCategoryNames(r);
+      if (names.length === 0) {
+        counts.Other = (counts.Other || 0) + 1;
+        return;
+      }
+      names.forEach((cat) => {
+        counts[cat] = (counts[cat] || 0) + 1;
+      });
     });
     return Object.entries(counts)
       .map(([category, count]) => ({ category, count }))
@@ -249,7 +274,9 @@ export default function Dashboard({ username }) {
             )}
           </div>
 
-          {filteredRecipes.length > 0 ? (
+          {searchLoading ? (
+            <div className="soft-card p-10 text-center text-slate-500">Searching recipes...</div>
+          ) : filteredRecipes.length > 0 ? (
             <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredRecipes.map((recipe) => (

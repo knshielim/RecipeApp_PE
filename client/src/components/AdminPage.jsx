@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { CATEGORY_COLOR_OPTIONS, getCategoryGradient } from "../utils/recipeCategoryColors";
 
@@ -53,7 +53,36 @@ const EMPTY_EDIT_FORM = {
 };
 
 const EMPTY_CATEGORY_FORM = { name: "", emoji: "🍽️", colorKey: "amber", sortOrder: 0 };
-const EMPTY_RECIPE_FORM = { title: "", category: "", ingredients: "", imageUrl: "" };
+const EMPTY_RECIPE_FORM = {
+  title: "",
+  category: "",
+  ingredients: "",
+  steps: "",
+  ownerName: "AI-Generated",
+  imageUrl: "",
+};
+
+function AdminModal({ title, onClose, children }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+      <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6 sm:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="font-bold text-xl text-slate-900">{title}</h2>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 p-1"
+            aria-label="Close"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+              <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function AdminPage({ token, username, onLogout }) {
   const navigate = useNavigate();
@@ -73,11 +102,15 @@ function AdminPage({ token, username, onLogout }) {
   const [editCategoryId, setEditCategoryId] = useState(null); // null | "new" | id
   const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY_FORM);
   const [savingCategory, setSavingCategory] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   // Popular Recipe state
   const [editRecipeId, setEditRecipeId] = useState(null); // null | "new" | id
   const [recipeForm, setRecipeForm] = useState(EMPTY_RECIPE_FORM);
   const [savingRecipe, setSavingRecipe] = useState(false);
+  const [recipeSearch, setRecipeSearch] = useState("");
+  const [recipeFilter, setRecipeFilter] = useState("all");
 
   const authHeaders = useCallback(
     () => ({ Authorization: `Bearer ${token}` }),
@@ -314,6 +347,8 @@ function AdminPage({ token, username, onLogout }) {
       title: r.title || "",
       category: r.category || "",
       ingredients: r.ingredients || "",
+      steps: r.steps || "",
+      ownerName: r.ownerName || "AI-Generated",
       imageUrl: r.imageUrl || "",
     });
   };
@@ -333,6 +368,7 @@ function AdminPage({ token, username, onLogout }) {
     if (!recipeForm.title.trim()) return setError("Recipe title is required.");
     if (!recipeForm.category.trim()) return setError("Category is required.");
     if (!recipeForm.ingredients.trim()) return setError("Ingredients are required.");
+    if (!recipeForm.steps.trim()) return setError("Cooking instructions are required.");
 
     setSavingRecipe(true);
     const isNew = editRecipeId === "new";
@@ -365,7 +401,7 @@ function AdminPage({ token, username, onLogout }) {
       loadRecipes
     );
 
-  function goToUserDashboard() {
+  function openUserDashboard() {
     navigate("/");
   }
 
@@ -380,13 +416,41 @@ function AdminPage({ token, username, onLogout }) {
     "w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm " +
     "focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 transition-all";
 
+  const filteredCategories = useMemo(() => {
+    const query = categorySearch.trim().toLowerCase();
+    return categories.filter((c) => {
+      const matchesSearch =
+        !query ||
+        c.name?.toLowerCase().includes(query) ||
+        c.emoji?.toLowerCase().includes(query) ||
+        c.colorKey?.toLowerCase().includes(query);
+      const matchesFilter = categoryFilter === "all" || c.colorKey === categoryFilter;
+      return matchesSearch && matchesFilter;
+    });
+  }, [categories, categoryFilter, categorySearch]);
+
+  const filteredRecipes = useMemo(() => {
+    const query = recipeSearch.trim().toLowerCase();
+    return recipes.filter((r) => {
+      const matchesSearch =
+        !query ||
+        r.title?.toLowerCase().includes(query) ||
+        r.category?.toLowerCase().includes(query) ||
+        r.ownerName?.toLowerCase().includes(query) ||
+        r.ingredients?.toLowerCase().includes(query) ||
+        r.steps?.toLowerCase().includes(query);
+      const matchesFilter = recipeFilter === "all" || r.category === recipeFilter;
+      return matchesSearch && matchesFilter;
+    });
+  }, [recipeFilter, recipeSearch, recipes]);
+
   return (
     <div className="min-h-screen bg-surface">
       <TopBar
         username={username}
         role="Admin"
         onLogout={onLogout}
-        onUserDashboard={() => navigate("/")}
+        onUserDashboard={openUserDashboard}
       />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-5">
@@ -423,20 +487,7 @@ function AdminPage({ token, username, onLogout }) {
 
         {/* Edit user modal */}
         {editUser && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-            <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6 sm:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-bold text-xl text-slate-900">Edit user information</h2>
-                <button
-                  onClick={cancelEdit}
-                  className="text-slate-400 hover:text-slate-600 p-1"
-                  aria-label="Close"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </div>
+          <AdminModal title="Edit user information" onClose={cancelEdit}>
               <p className="text-sm text-slate-500 mb-5">
                 Editing <span className="font-semibold text-green-600">@{editUser}</span>
                 {" "}— username cannot be changed.
@@ -533,8 +584,7 @@ function AdminPage({ token, username, onLogout }) {
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
+          </AdminModal>
         )}
 
         {/* Users tab */}
@@ -649,11 +699,71 @@ function AdminPage({ token, username, onLogout }) {
               every user's dashboard. Anything added, edited, or removed here shows up there immediately.
             </p>
 
+            <div className="flex flex-col lg:flex-row gap-3">
+              <input
+                type="search"
+                value={categorySearch}
+                onChange={(e) => setCategorySearch(e.target.value)}
+                placeholder="Search categories by name, emoji, or color..."
+                className={inputClass}
+              />
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className={`${inputClass} bg-white lg:max-w-xs`}
+              >
+                <option value="all">All colors</option>
+                {CATEGORY_COLOR_OPTIONS.map((opt) => (
+                  <option key={opt.key} value={opt.key}>{opt.label}</option>
+                ))}
+              </select>
+              <button
+                onClick={startNewCategory}
+                className="bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm shadow-sm shrink-0"
+              >
+                + Add category
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 divide-y divide-slate-50">
+              {filteredCategories.length === 0 ? (
+                <p className="text-sm text-slate-400 p-5">No categories match your filters.</p>
+              ) : (
+                filteredCategories.map((c) => (
+                  <div key={c.id} className="flex items-center gap-4 p-4">
+                    <div
+                      className={`w-12 h-12 shrink-0 rounded-full bg-gradient-to-br ${getCategoryGradient(c.colorKey)} flex items-center justify-center text-lg border-2 border-brand/20`}
+                    >
+                      {c.emoji}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-900">{c.name}</p>
+                      <p className="text-xs text-slate-400">order {c.sortOrder}</p>
+                    </div>
+                    <div className="flex gap-3 shrink-0">
+                      <button
+                        onClick={() => startEditCategory(c)}
+                        className="text-green-600 text-sm font-medium hover:text-green-700 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteCategory(c)}
+                        className="text-red-500 text-sm font-medium hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
             {editCategoryId && (
-              <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-                <h2 className="font-bold text-lg text-slate-900 mb-4">
-                  {editCategoryId === "new" ? "New category" : `Edit '${categoryForm.name}'`}
-                </h2>
+              <AdminModal
+                title={editCategoryId === "new" ? "New category" : `Edit '${categoryForm.name}'`}
+                onClose={cancelEditCategory}
+              >
                 <form onSubmit={saveCategory} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -664,7 +774,7 @@ function AdminPage({ token, username, onLogout }) {
                         value={categoryForm.name}
                         onChange={handleCategoryInput}
                         className={inputClass}
-                        placeholder="e.g., Tacos"
+                        placeholder="e.g., Mexican"
                         required
                       />
                     </div>
@@ -730,51 +840,8 @@ function AdminPage({ token, username, onLogout }) {
                     </button>
                   </div>
                 </form>
-              </div>
+              </AdminModal>
             )}
-
-            {!editCategoryId && (
-              <button
-                onClick={startNewCategory}
-                className="bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm shadow-sm"
-              >
-                + Add category
-              </button>
-            )}
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 divide-y divide-slate-50">
-              {categories.length === 0 ? (
-                <p className="text-sm text-slate-400 p-5">No categories yet — add one above.</p>
-              ) : (
-                categories.map((c) => (
-                  <div key={c.id} className="flex items-center gap-4 p-4">
-                    <div
-                      className={`w-12 h-12 shrink-0 rounded-full bg-gradient-to-br ${getCategoryGradient(c.colorKey)} flex items-center justify-center text-lg border-2 border-brand/20`}
-                    >
-                      {c.emoji}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900">{c.name}</p>
-                      <p className="text-xs text-slate-400">order {c.sortOrder}</p>
-                    </div>
-                    <div className="flex gap-3 shrink-0">
-                      <button
-                        onClick={() => startEditCategory(c)}
-                        className="text-green-600 text-sm font-medium hover:text-green-700 hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deleteCategory(c)}
-                        className="text-red-500 text-sm font-medium hover:underline"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
         )}
 
@@ -786,11 +853,71 @@ function AdminPage({ token, username, onLogout }) {
               the user dashboard. Anything added, edited, or removed here shows up there immediately.
             </p>
 
+            <div className="flex flex-col lg:flex-row gap-3">
+              <input
+                type="search"
+                value={recipeSearch}
+                onChange={(e) => setRecipeSearch(e.target.value)}
+                placeholder="Search recipes by title, category, owner, ingredients, or instructions..."
+                className={inputClass}
+              />
+              <select
+                value={recipeFilter}
+                onChange={(e) => setRecipeFilter(e.target.value)}
+                className={`${inputClass} bg-white lg:max-w-xs`}
+              >
+                <option value="all">All categories</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={startNewRecipe}
+                className="bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm shadow-sm shrink-0"
+              >
+                + Add recipe
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 divide-y divide-slate-50">
+              {filteredRecipes.length === 0 ? (
+                <p className="text-sm text-slate-400 p-5">No recipes match your filters.</p>
+              ) : (
+                filteredRecipes.map((r) => (
+                  <div key={r.id} className="flex items-start gap-4 p-4">
+                    <div className="w-12 h-12 shrink-0 rounded-xl bg-gradient-to-br from-orange-100 to-amber-200 flex items-center justify-center text-xl">
+                      🍽️
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-900">{r.title}</p>
+                      <p className="text-xs text-slate-500">{r.category}</p>
+                      <p className="text-xs text-slate-400 mt-1">Owner: {r.ownerName || "AI-Generated"}</p>
+                      <p className="text-xs text-slate-400 mt-1 truncate">{r.ingredients}</p>
+                    </div>
+                    <div className="flex gap-3 shrink-0">
+                      <button
+                        onClick={() => startEditRecipe(r)}
+                        className="text-green-600 text-sm font-medium hover:text-green-700 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteRecipe(r)}
+                        className="text-red-500 text-sm font-medium hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
             {editRecipeId && (
-              <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-                <h2 className="font-bold text-lg text-slate-900 mb-4">
-                  {editRecipeId === "new" ? "New recipe" : `Edit '${recipeForm.title}'`}
-                </h2>
+              <AdminModal
+                title={editRecipeId === "new" ? "New recipe" : `Edit '${recipeForm.title}'`}
+                onClose={cancelEditRecipe}
+              >
                 <form onSubmit={saveRecipe} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -813,7 +940,7 @@ function AdminPage({ token, username, onLogout }) {
                         value={recipeForm.category}
                         onChange={handleRecipeInput}
                         className={inputClass}
-                        placeholder="e.g., Bowls"
+                        placeholder="e.g., Salad"
                         list="admin-recipe-categories"
                         required
                       />
@@ -823,19 +950,18 @@ function AdminPage({ token, username, onLogout }) {
                         ))}
                       </datalist>
                     </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Ingredients *</label>
-                      <textarea
-                        name="ingredients"
-                        value={recipeForm.ingredients}
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Owner</label>
+                      <input
+                        type="text"
+                        name="ownerName"
+                        value={recipeForm.ownerName}
                         onChange={handleRecipeInput}
                         className={inputClass}
-                        rows={2}
-                        placeholder="comma-separated, e.g. chicken breast, rice, broccoli"
-                        required
+                        placeholder="AI-Generated"
                       />
                     </div>
-                    <div className="md:col-span-2">
+                    <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Image URL</label>
                       <input
                         type="text"
@@ -844,6 +970,30 @@ function AdminPage({ token, username, onLogout }) {
                         onChange={handleRecipeInput}
                         className={inputClass}
                         placeholder="Optional"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Ingredients *</label>
+                      <textarea
+                        name="ingredients"
+                        value={recipeForm.ingredients}
+                        onChange={handleRecipeInput}
+                        className={inputClass}
+                        rows={3}
+                        placeholder="comma-separated, e.g. chicken breast, rice, broccoli"
+                        required
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Cooking Instructions *</label>
+                      <textarea
+                        name="steps"
+                        value={recipeForm.steps}
+                        onChange={handleRecipeInput}
+                        className={inputClass}
+                        rows={4}
+                        placeholder="1. Prep ingredients. 2. Cook... 3. Serve."
+                        required
                       />
                     </div>
                   </div>
@@ -864,50 +1014,8 @@ function AdminPage({ token, username, onLogout }) {
                     </button>
                   </div>
                 </form>
-              </div>
+              </AdminModal>
             )}
-
-            {!editRecipeId && (
-              <button
-                onClick={startNewRecipe}
-                className="bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm shadow-sm"
-              >
-                + Add recipe
-              </button>
-            )}
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 divide-y divide-slate-50">
-              {recipes.length === 0 ? (
-                <p className="text-sm text-slate-400 p-5">No recipes yet — add one above.</p>
-              ) : (
-                recipes.map((r) => (
-                  <div key={r.id} className="flex items-start gap-4 p-4">
-                    <div className="w-12 h-12 shrink-0 rounded-xl bg-gradient-to-br from-orange-100 to-amber-200 flex items-center justify-center text-xl">
-                      🍽️
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900">{r.title}</p>
-                      <p className="text-xs text-slate-500">{r.category}</p>
-                      <p className="text-xs text-slate-400 mt-1 truncate">{r.ingredients}</p>
-                    </div>
-                    <div className="flex gap-3 shrink-0">
-                      <button
-                        onClick={() => startEditRecipe(r)}
-                        className="text-green-600 text-sm font-medium hover:text-green-700 hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deleteRecipe(r)}
-                        className="text-red-500 text-sm font-medium hover:underline"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
         )}
       </main>

@@ -132,7 +132,7 @@ public class AdminController : ControllerBase
     {
         var recipes = await _db.Recipes
             .OrderByDescending(r => r.Id)
-            .Select(r => new { r.Id, r.UserId, r.Title, r.Ingredients, r.Category, r.ImageUrl })
+            .Select(r => new { r.Id, r.UserId, r.Title, r.Ingredients, r.Steps, r.Category, r.ImageUrl, r.OwnerName })
             .ToListAsync();
 
         return Ok(recipes);
@@ -154,12 +154,15 @@ public class AdminController : ControllerBase
             UserId = 1, // shared demo dataset used by the user dashboard
             Title = dto.Title.Trim(),
             Ingredients = dto.Ingredients.Trim(),
+            Steps = string.IsNullOrWhiteSpace(dto.Steps) ? "" : dto.Steps.Trim(),
             Category = dto.Category.Trim(),
-            ImageUrl = string.IsNullOrWhiteSpace(dto.ImageUrl) ? "" : dto.ImageUrl.Trim()
+            ImageUrl = string.IsNullOrWhiteSpace(dto.ImageUrl) ? "" : dto.ImageUrl.Trim(),
+            OwnerName = string.IsNullOrWhiteSpace(dto.OwnerName) ? "AI-Generated" : dto.OwnerName.Trim()
         };
 
         _db.Recipes.Add(recipe);
         await _db.SaveChangesAsync();
+        await SyncRecipeCategoryAssignments(recipe);
 
         return Ok(new { message = $"Recipe '{recipe.Title}' created.", recipe.Id });
     }
@@ -181,10 +184,13 @@ public class AdminController : ControllerBase
 
         recipe.Title = dto.Title.Trim();
         recipe.Ingredients = dto.Ingredients.Trim();
+        recipe.Steps = string.IsNullOrWhiteSpace(dto.Steps) ? "" : dto.Steps.Trim();
         recipe.Category = dto.Category.Trim();
         recipe.ImageUrl = string.IsNullOrWhiteSpace(dto.ImageUrl) ? "" : dto.ImageUrl.Trim();
+        recipe.OwnerName = string.IsNullOrWhiteSpace(dto.OwnerName) ? recipe.OwnerName : dto.OwnerName.Trim();
 
         await _db.SaveChangesAsync();
+        await SyncRecipeCategoryAssignments(recipe);
         return Ok(new { message = $"Recipe '{recipe.Title}' updated." });
     }
 
@@ -273,6 +279,35 @@ public class AdminController : ControllerBase
         _db.RecipeCategories.Remove(category);
         await _db.SaveChangesAsync();
         return Ok(new { message = $"Category '{category.Name}' deleted." });
+    }
+
+    private async Task SyncRecipeCategoryAssignments(Recipe recipe)
+    {
+        var existing = await _db.RecipeCategoryAssignments
+            .Where(a => a.RecipeId == recipe.Id)
+            .ToListAsync();
+
+        if (existing.Count > 0)
+            _db.RecipeCategoryAssignments.RemoveRange(existing);
+
+        if (!string.IsNullOrWhiteSpace(recipe.Category))
+        {
+            var categoryId = await _db.RecipeCategories
+                .Where(c => c.Name == recipe.Category)
+                .Select(c => (int?)c.Id)
+                .FirstOrDefaultAsync();
+
+            if (categoryId.HasValue)
+            {
+                _db.RecipeCategoryAssignments.Add(new RecipeCategoryAssignment
+                {
+                    RecipeId = recipe.Id,
+                    RecipeCategoryId = categoryId.Value
+                });
+            }
+        }
+
+        await _db.SaveChangesAsync();
     }
 
     // GET api/admin/users/{username}/overview — activity summary for a user account

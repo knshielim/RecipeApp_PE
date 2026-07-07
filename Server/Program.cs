@@ -139,30 +139,6 @@ using (var scope = app.Services.CreateScope())
 
     db.SaveChanges();
 
-    // Assign categories to recipes using the new join table
-    var allCategories = db.RecipeCategories.ToDictionary(c => c.Name, c => c.Id, StringComparer.OrdinalIgnoreCase);
-    
-    foreach (var recipe in db.Recipes)
-    {
-        if (!string.IsNullOrWhiteSpace(recipe.Category) && allCategories.TryGetValue(recipe.Category, out var categoryId))
-        {
-            // Check if assignment already exists
-            var existingAssignment = db.RecipeCategoryAssignments
-                .FirstOrDefault(rca => rca.RecipeId == recipe.Id && rca.RecipeCategoryId == categoryId);
-            
-            if (existingAssignment == null)
-            {
-                db.RecipeCategoryAssignments.Add(new RecipeCategoryAssignment
-                {
-                    RecipeId = recipe.Id,
-                    RecipeCategoryId = categoryId
-                });
-            }
-        }
-    }
-    
-    db.SaveChanges();
-
     var currentMonday = WeekDateHelper.CurrentMonday();
 
     // One-time backfill: plans that inherited the migration default land on this week
@@ -211,27 +187,25 @@ using (var scope = app.Services.CreateScope())
 
     var categorySeedList = new[]
     {
-        new RecipeCategory { Name = "Tacos", Emoji = "🌮", ColorKey = "amber", SortOrder = 0 },
-        new RecipeCategory { Name = "Bowls", Emoji = "🥗", ColorKey = "green", SortOrder = 1 },
-        new RecipeCategory { Name = "Veggie", Emoji = "🥦", ColorKey = "lime", SortOrder = 2 },
-        new RecipeCategory { Name = "Breakfast", Emoji = "🍳", ColorKey = "yellow", SortOrder = 3 },
-        new RecipeCategory { Name = "Dessert", Emoji = "🍰", ColorKey = "pink", SortOrder = 4 },
-        new RecipeCategory { Name = "Thai", Emoji = "🍜", ColorKey = "red", SortOrder = 5 },
-        new RecipeCategory { Name = "Grilled", Emoji = "🥩", ColorKey = "stone", SortOrder = 6 },
-        new RecipeCategory { Name = "Pasta", Emoji = "🍝", ColorKey = "orange", SortOrder = 7 },
-        new RecipeCategory { Name = "Soup", Emoji = "🍲", ColorKey = "blue", SortOrder = 8 },
-        new RecipeCategory { Name = "Salad", Emoji = "🥬", ColorKey = "emerald", SortOrder = 9 },
-        new RecipeCategory { Name = "Sandwich", Emoji = "🥪", ColorKey = "brown", SortOrder = 10 },
-        new RecipeCategory { Name = "Curry", Emoji = "🍛", ColorKey = "purple", SortOrder = 11 },
-        new RecipeCategory { Name = "Seafood", Emoji = "🦐", ColorKey = "cyan", SortOrder = 12 },
-        new RecipeCategory { Name = "Mexican", Emoji = "🇲🇽", ColorKey = "rose", SortOrder = 13 },
-        new RecipeCategory { Name = "Italian", Emoji = "🇮🇹", ColorKey = "violet", SortOrder = 14 },
-        new RecipeCategory { Name = "Asian", Emoji = "🥡", ColorKey = "indigo", SortOrder = 15 },
-        new RecipeCategory { Name = "Mediterranean", Emoji = "🫒", ColorKey = "teal", SortOrder = 16 },
-        new RecipeCategory { Name = "Comfort Food", Emoji = "🍲", ColorKey = "warm", SortOrder = 17 },
-        new RecipeCategory { Name = "Quick & Easy", Emoji = "⚡", ColorKey = "sky", SortOrder = 18 },
-        new RecipeCategory { Name = "Healthy", Emoji = "💚", ColorKey = "mint", SortOrder = 19 },
-        new RecipeCategory { Name = "Kids Friendly", Emoji = "👶", ColorKey = "baby", SortOrder = 20 }
+        new RecipeCategory { Name = "Veggie", Emoji = "🥦", ColorKey = "lime", SortOrder = 0 },
+        new RecipeCategory { Name = "Breakfast", Emoji = "🍳", ColorKey = "yellow", SortOrder = 1 },
+        new RecipeCategory { Name = "Dessert", Emoji = "🍰", ColorKey = "pink", SortOrder = 2 },
+        new RecipeCategory { Name = "Thai", Emoji = "🍜", ColorKey = "red", SortOrder = 3 },
+        new RecipeCategory { Name = "Grilled", Emoji = "🥩", ColorKey = "stone", SortOrder = 4 },
+        new RecipeCategory { Name = "Pasta", Emoji = "🍝", ColorKey = "orange", SortOrder = 5 },
+        new RecipeCategory { Name = "Soup", Emoji = "🍲", ColorKey = "blue", SortOrder = 6 },
+        new RecipeCategory { Name = "Salad", Emoji = "🥬", ColorKey = "emerald", SortOrder = 7 },
+        new RecipeCategory { Name = "Sandwich", Emoji = "🥪", ColorKey = "brown", SortOrder = 8 },
+        new RecipeCategory { Name = "Curry", Emoji = "🍛", ColorKey = "purple", SortOrder = 9 },
+        new RecipeCategory { Name = "Seafood", Emoji = "🦐", ColorKey = "cyan", SortOrder = 10 },
+        new RecipeCategory { Name = "Mexican", Emoji = "🇲🇽", ColorKey = "rose", SortOrder = 11 },
+        new RecipeCategory { Name = "Italian", Emoji = "🇮🇹", ColorKey = "violet", SortOrder = 12 },
+        new RecipeCategory { Name = "Asian", Emoji = "🥡", ColorKey = "indigo", SortOrder = 13 },
+        new RecipeCategory { Name = "Mediterranean", Emoji = "🫒", ColorKey = "teal", SortOrder = 14 },
+        new RecipeCategory { Name = "Comfort Food", Emoji = "🍲", ColorKey = "warm", SortOrder = 15 },
+        new RecipeCategory { Name = "Quick & Easy", Emoji = "⚡", ColorKey = "sky", SortOrder = 16 },
+        new RecipeCategory { Name = "Healthy", Emoji = "💚", ColorKey = "mint", SortOrder = 17 },
+        new RecipeCategory { Name = "Kids Friendly", Emoji = "👶", ColorKey = "baby", SortOrder = 18 }
     };
 
     var existingCategoryNames = db.RecipeCategories.Select(c => c.Name).ToHashSet();
@@ -254,6 +228,9 @@ using (var scope = app.Services.CreateScope())
         }
     }
     db.SaveChanges();
+
+    RecipeCategoryAssigner.EnsureAssignments(db);
+    RecipeCategoryAssigner.RemoveUnusedCategories(db, "Tacos", "Bowls");
 }
 
 // ---------- Vision chat client (for receipt image parsing) ----------
@@ -280,6 +257,13 @@ static IResult HandleAiError(Exception ex)
         return Results.Problem(
             detail: "The AI service is rate-limited right now — please wait a moment and try again.",
             statusCode: StatusCodes.Status429TooManyRequests);
+    }
+
+    if (ex is HttpOperationException unavailableEx && unavailableEx.StatusCode == HttpStatusCode.ServiceUnavailable)
+    {
+        return Results.Problem(
+            detail: "The AI service is temporarily unavailable — please try again in a moment.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 
     return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
@@ -647,11 +631,11 @@ app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest req, Kernel 
             $"no pork/alcohol for halal). Invent ONE brand-new recipe" +
             (string.IsNullOrWhiteSpace(req.Craving) ? "." : $" involving: {req.Craving}.") +
             " Respond with ONLY a JSON object, no prose, no markdown fences, in the form: " +
-            "{\"title\":\"...\",\"category\":\"Breakfast|Tacos|Bowls|Veggie|Dessert|Thai|Grilled|Pasta|Soup|Salad|Sandwich|Curry|Seafood|Mexican|Italian|Asian|Mediterranean|Comfort Food|Quick & Easy|Healthy|Kids Friendly\"," +
+            "{\"title\":\"...\",\"category\":\"Breakfast|Veggie|Dessert|Thai|Grilled|Pasta|Soup|Salad|Sandwich|Curry|Seafood|Mexican|Italian|Asian|Mediterranean|Comfort Food|Quick & Easy|Healthy|Kids Friendly\"," +
             "\"ingredients\":\"comma, separated, list\",\"instructions\":\"numbered steps as one string\"," +
             "\"dietRestriction\":\"none|vegetarian|vegan|gluten-free|dairy-free|nut-free|low-carb|paleo|low-sodium|sugar-free|whole30|mediterranean|pescatarian\"," +
             "\"allergens\":\"comma, separated, allergens, or, empty, string\"," +
-            "\"imageUrl\":\"https://picsum.photos/seed/[recipe-title-slug]/640/400\"}");
+            "\"imageUrl\":\"\"}");
         history.AddUserMessage(string.IsNullOrWhiteSpace(req.Craving)
             ? "Surprise me with a new recipe."
             : $"Come up with a new recipe using {req.Craving}.");
@@ -667,13 +651,6 @@ app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest req, Kernel 
                 reply = result.Content ?? "Sorry, I couldn't come up with a recipe that time — try again.",
                 recipe = (object?)null
             });
-        }
-
-        // Generate image URL if not provided
-        if (string.IsNullOrWhiteSpace(parsed.ImageUrl))
-        {
-            var slug = Uri.EscapeDataString(parsed.Title.Replace(' ', '-').ToLowerInvariant());
-            parsed = parsed with { ImageUrl = $"https://picsum.photos/seed/{slug}/640/400" };
         }
 
         var reply = $"**{parsed.Title}** ({parsed.Category})\n\n" +
@@ -702,8 +679,10 @@ app.MapPost("/api/recipes", async (SaveRecipeRequest req, AppDbContext db) =>
         UserId = userId,
         Title = req.Title.Trim(),
         Ingredients = req.Ingredients.Trim(),
+        Steps = string.IsNullOrWhiteSpace(req.Steps) ? "" : req.Steps.Trim(),
         Category = string.IsNullOrWhiteSpace(req.Category) ? "Uncategorized" : req.Category.Trim(),
         ImageUrl = string.IsNullOrWhiteSpace(req.ImageUrl) ? "" : req.ImageUrl.Trim(),
+        OwnerName = string.IsNullOrWhiteSpace(req.OwnerName) ? "AI-Generated" : req.OwnerName.Trim(),
         DietRestriction = string.IsNullOrWhiteSpace(req.DietRestriction) ? "none" : req.DietRestriction.Trim(),
         Allergens = string.IsNullOrWhiteSpace(req.Allergens) ? "" : req.Allergens.Trim()
     };
@@ -730,6 +709,23 @@ app.MapPost("/api/recipes", async (SaveRecipeRequest req, AppDbContext db) =>
             }
         }
         await db.SaveChangesAsync();
+    }
+    else if (!string.IsNullOrWhiteSpace(recipe.Category))
+    {
+        var categoryId = await db.RecipeCategories
+            .Where(c => c.Name == recipe.Category)
+            .Select(c => (int?)c.Id)
+            .FirstOrDefaultAsync();
+
+        if (categoryId.HasValue)
+        {
+            db.RecipeCategoryAssignments.Add(new RecipeCategoryAssignment
+            {
+                RecipeId = recipe.Id,
+                RecipeCategoryId = categoryId.Value
+            });
+            await db.SaveChangesAsync();
+        }
     }
 
     return Results.Ok(new { recipe.Id, recipe.Title, recipe.Category, recipe.ImageUrl });
@@ -1212,4 +1208,4 @@ record DetectedObject(string Label, double Confidence, int YMin, int XMin, int Y
 record DetectionResult(List<DetectedObject> Objects, string Summary);
 record GenerateRecipeRequest(string? Craving);
 record GeneratedRecipe(string Title, string Category, string Ingredients, string Instructions, string DietRestriction, string Allergens, string ImageUrl);
-record SaveRecipeRequest(string Title, string Ingredients, string? Category, string? ImageUrl, string? DietRestriction, string? Allergens, string[]? CategoryIds);
+record SaveRecipeRequest(string Title, string Ingredients, string? Steps, string? Category, string? ImageUrl, string? OwnerName, string? DietRestriction, string? Allergens, string[]? CategoryIds);

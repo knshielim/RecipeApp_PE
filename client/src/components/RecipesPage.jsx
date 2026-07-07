@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   getRecipes,
   createRecipe,
@@ -13,6 +13,9 @@ import { canManageRecipe } from "../utils/recipePermissions";
 import { useUserProfile } from "../context/UserProfileContext";
 import { DIET_OPTIONS } from "../utils/dietLabels";
 import { getCategoryGradient } from "../utils/recipeCategoryColors";
+import { useSearch } from "./layout/AppLayout";
+import { matchesSearch } from "../utils/search";
+import { getRecipeCategoryNames } from "../utils/recipeCategories";
 
 const API = "http://localhost:5237";
 
@@ -27,16 +30,17 @@ const emptyForm = {
   imageUrl: "",
 };
 
-const FALLBACK_CATEGORIES = ["Asian", "Bowls", "Breakfast", "Comfort Food", "Curry", "Dessert", "Grilled", "Healthy", "Italian", "Kids Friendly", "Mediterranean", "Mexican", "Pasta", "Quick & Easy", "Salad", "Sandwich", "Seafood", "Soup", "Thai", "Tacos", "Veggie"];
+const FALLBACK_CATEGORIES = ["Asian", "Breakfast", "Comfort Food", "Curry", "Dessert", "Grilled", "Healthy", "Italian", "Kids Friendly", "Mediterranean", "Mexican", "Pasta", "Quick & Easy", "Salad", "Sandwich", "Seafood", "Soup", "Thai", "Veggie"];
 
 function RecipesPage({ username, isAdmin = false }) {
   const { displayName } = useUserProfile();
+  const { searchQuery, setSearchQuery } = useSearch();
   const [recipes, setRecipes] = useState([]);
   const [categories, setCategories] = useState([]); // names only, used by the "Top Recipe Categories" strip
   const [categoryList, setCategoryList] = useState([]); // full {id, name, emoji, colorKey} objects, used by the form
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
-  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
   const [activeCategory, setActiveCategory] = useState(null);
   const [error, setError] = useState("");
   const [favoriteIds, setFavoriteIds] = useState(new Set());
@@ -44,15 +48,26 @@ function RecipesPage({ username, isAdmin = false }) {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  async function loadRecipes() {
+  const loadRecipes = useCallback(async (searchTerm = debouncedSearch) => {
     setLoading(true);
     try {
       let data = [];
 
       if (showFavoritesOnly && username) {
         data = await getFavoriteRecipes(username);
+        if (searchTerm.trim()) {
+          data = data.filter((recipe) =>
+            matchesSearch(
+              searchTerm,
+              recipe.title,
+              recipe.ingredients,
+              recipe.category,
+              ...getRecipeCategoryNames(recipe)
+            )
+          );
+        }
       } else {
-        data = await getRecipes(search, activeCategory || "");
+        data = await getRecipes(searchTerm.trim(), activeCategory || "");
       }
 
       setRecipes(data);
@@ -67,7 +82,7 @@ function RecipesPage({ username, isAdmin = false }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [activeCategory, debouncedSearch, showFavoritesOnly, username]);
 
   async function loadCategories() {
     try {
@@ -90,8 +105,13 @@ function RecipesPage({ username, isAdmin = false }) {
   }, []);
 
   useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
     loadRecipes();
-  }, [showFavoritesOnly, activeCategory]);
+  }, [loadRecipes]);
 
   async function toggleFavorite(recipeId) {
     if (!username) {
@@ -226,13 +246,9 @@ function RecipesPage({ username, isAdmin = false }) {
     }
   }
 
-  async function handleSearch(e) {
-    e.preventDefault();
-    await loadRecipes();
-  }
-
   async function clearFilters() {
-    setSearch("");
+    setSearchQuery("");
+    setDebouncedSearch("");
     setActiveCategory(null);
     setShowFavoritesOnly(false);
     setLoading(true);
@@ -251,7 +267,7 @@ function RecipesPage({ username, isAdmin = false }) {
     }
   }
 
-  const hasActiveFilters = search.trim() || activeCategory || showFavoritesOnly;
+  const hasActiveFilters = searchQuery.trim() || activeCategory || showFavoritesOnly;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -269,33 +285,7 @@ function RecipesPage({ username, isAdmin = false }) {
       </div>
 
       {/* Filters */}
-      <div className="soft-card p-4 sm:p-5 space-y-4">
-        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 relative">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-3-3" strokeLinecap="round" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search by title or ingredients..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="input-field w-full pl-9"
-            />
-          </div>
-
-          <button type="submit" className="btn-primary text-sm sm:px-6">
-            Search
-          </button>
-        </form>
-
+      <div className="soft-card p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -338,8 +328,6 @@ function RecipesPage({ username, isAdmin = false }) {
             >
               <div
                 className={`w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full bg-gradient-to-br ${getCategoryGradient(
-                  cat === "Tacos" ? "amber" :
-                  cat === "Bowls" ? "green" :
                   cat === "Veggie" ? "lime" :
                   cat === "Breakfast" ? "yellow" :
                   cat === "Dessert" ? "pink" :
@@ -365,9 +353,7 @@ function RecipesPage({ username, isAdmin = false }) {
                     : 'border-brand/30 group-hover:border-brand/60'
                 }`}
               >
-                {cat === "Tacos" ? "🌮" :
-                 cat === "Bowls" ? "🥗" :
-                 cat === "Veggie" ? "🥦" :
+                {cat === "Veggie" ? "🥦" :
                  cat === "Breakfast" ? "🍳" :
                  cat === "Dessert" ? "🍰" :
                  cat === "Thai" ? "🍜" :

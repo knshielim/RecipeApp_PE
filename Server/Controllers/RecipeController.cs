@@ -27,10 +27,13 @@ public class RecipeController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(search))
         {
+            var term = search.Trim().ToLower();
             query = query.Where(r =>
-                r.Title.Contains(search) ||
-                r.Ingredients.Contains(search) ||
-                r.Category.Contains(search));
+                r.Title.ToLower().Contains(term) ||
+                r.Ingredients.ToLower().Contains(term) ||
+                r.Category.ToLower().Contains(term) ||
+                r.OwnerName.ToLower().Contains(term) ||
+                r.CategoryAssignments.Any(ca => ca.RecipeCategory.Name.ToLower().Contains(term)));
         }
 
         if (!string.IsNullOrWhiteSpace(category))
@@ -257,23 +260,41 @@ public class RecipeController : ControllerBase
 
         var recipes = await _context.FavoriteRecipes
             .Where(f => f.Username == username)
-            .Include(f => f.Recipe)
-            .Select(f => new RecipeDTO
-            {
-                Id = f.Recipe.Id,
-                UserId = f.Recipe.UserId,
-                OwnerName = f.Recipe.OwnerName,
-                DietRestriction = f.Recipe.DietRestriction,
-                Title = f.Recipe.Title,
-                Ingredients = f.Recipe.Ingredients,
-                Steps = f.Recipe.Steps,
-                Category = f.Recipe.Category,
-                ImageUrl = f.Recipe.ImageUrl,
-                IsFavorite = true
-            })
+            .Select(f => f.Recipe)
             .ToListAsync();
 
-        return Ok(recipes);
+        var recipeIds = recipes.Select(r => r.Id).ToList();
+        var categoryAssignments = await _context.RecipeCategoryAssignments
+            .Where(rca => recipeIds.Contains(rca.RecipeId))
+            .Include(rca => rca.RecipeCategory)
+            .ToListAsync();
+
+        var result = recipes.Select(r => new RecipeDTO
+        {
+            Id = r.Id,
+            UserId = r.UserId,
+            OwnerName = r.OwnerName,
+            DietRestriction = r.DietRestriction,
+            Allergens = r.Allergens,
+            Title = r.Title,
+            Ingredients = r.Ingredients,
+            Steps = r.Steps,
+            Category = r.Category,
+            ImageUrl = r.ImageUrl,
+            IsFavorite = true,
+            Categories = categoryAssignments
+                .Where(ca => ca.RecipeId == r.Id)
+                .Select(ca => new CategoryDTO
+                {
+                    Id = ca.RecipeCategory.Id,
+                    Name = ca.RecipeCategory.Name,
+                    Emoji = ca.RecipeCategory.Emoji,
+                    ColorKey = ca.RecipeCategory.ColorKey
+                })
+                .ToList()
+        }).ToList();
+
+        return Ok(result);
     }
 
     [HttpPost("{id}/favorite")]

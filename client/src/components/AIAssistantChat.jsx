@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import PreferencesForm from "./PreferencesForm";
 import RecipePicker from "./RecipePicker";
-import { currentWeekStart, addWeeks, formatWeekLabel, formatWeekStart } from "../utils/weekUtils";
+import { currentWeekStart, addWeeks, formatWeekLabel, formatWeekStart, parseWeekStart } from "../utils/weekUtils";
 
 const API = "http://localhost:5237";
 const USER_ID = 1; // TODO: replace with the real authenticated user id
@@ -15,6 +15,12 @@ async function postJson(path, body) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 503) {
+      throw new Error("The AI service is temporarily unavailable. Please try again in a moment.");
+    }
+    if (res.status === 429) {
+      throw new Error("The AI service is busy right now. Please wait a moment and try again.");
+    }
     throw new Error(data.detail || data.error || `Request failed (${res.status})`);
   }
   return data;
@@ -205,8 +211,10 @@ export default function AIAssistantChat() {
       await postJson("/api/recipes", {
         title: recipe.title,
         ingredients: recipe.ingredients,
+        steps: recipe.instructions || "",
         category: recipe.category,
         imageUrl: recipe.imageUrl || "",
+        ownerName: "AI-Generated",
         dietRestriction: recipe.dietRestriction || "none",
         allergens: recipe.allergens || "",
       });
@@ -333,18 +341,34 @@ export default function AIAssistantChat() {
 
               {/* Save a freshly generated recipe */}
               {m.role === "assistant" && m.recipe && (
-                <div className="mt-1.5 flex gap-2 justify-start">
-                  {!m.saved ? (
-                    <button
-                      onClick={() => saveGeneratedRecipe(m.recipe, i)}
-                      disabled={loading}
-                      className="text-xs bg-green-600 text-white px-3 py-1 rounded-full disabled:opacity-50"
-                    >
-                      💾 Save this recipe
-                    </button>
-                  ) : (
-                    <span className="text-xs text-green-700">Saved to your recipes ✓</span>
+                <div className="mt-2 space-y-2 max-w-[85%]">
+                  {m.recipe.imageUrl && (
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                      <img
+                        src={m.recipe.imageUrl}
+                        alt={m.recipe.title}
+                        className="w-full h-48 object-cover"
+                      />
+                    </div>
                   )}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600 space-y-1">
+                    <p><span className="font-semibold text-slate-800">Category:</span> {m.recipe.category}</p>
+                    <p><span className="font-semibold text-slate-800">Owner:</span> AI-Generated</p>
+                    <p><span className="font-semibold text-slate-800">Cooking instructions:</span> {m.recipe.instructions}</p>
+                  </div>
+                  <div className="flex gap-2 justify-start">
+                    {!m.saved ? (
+                      <button
+                        onClick={() => saveGeneratedRecipe(m.recipe, i)}
+                        disabled={loading}
+                        className="text-xs bg-green-600 text-white px-3 py-1 rounded-full disabled:opacity-50"
+                      >
+                        💾 Save this recipe
+                      </button>
+                    ) : (
+                      <span className="text-xs text-green-700">Saved to your recipes ✓</span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
