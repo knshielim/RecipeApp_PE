@@ -14,7 +14,7 @@ using Server.Services;
 using Server.Models;
 using Server.Data;
 using Server.Middleware;
-
+using Server.DTO;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -276,23 +276,53 @@ if (apiKey is not null)
 
 // ---------- Helper: shared error handling for AI calls ----------
 
-static IResult HandleAiError(Exception ex)
+static IResult ApiError(HttpContext http, int statusCode, string message)
 {
-    if (ex is HttpOperationException httpEx && httpEx.StatusCode == HttpStatusCode.TooManyRequests)
+    return Results.Json(new ApiErrorResponse
     {
-        return Results.Problem(
-            detail: "The AI service is rate-limited right now — please wait a moment and try again.",
-            statusCode: StatusCodes.Status429TooManyRequests);
+        StatusCode = statusCode,
+        Message = message,
+        TraceId = http.TraceIdentifier
+    }, statusCode: statusCode);
+}
+
+static IResult HandleAiError(Exception ex, HttpContext http)
+{
+    if (ex is HttpOperationException httpEx &&
+        httpEx.StatusCode == HttpStatusCode.TooManyRequests)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status429TooManyRequests,
+            "The AI service is busy right now. Please wait a moment and try again.");
     }
 
-    if (ex is HttpOperationException unavailableEx && unavailableEx.StatusCode == HttpStatusCode.ServiceUnavailable)
+    if (ex is HttpOperationException unavailableEx &&
+        unavailableEx.StatusCode == HttpStatusCode.ServiceUnavailable)
     {
-        return Results.Problem(
-            detail: "The AI service is temporarily unavailable — please try again in a moment.",
-            statusCode: StatusCodes.Status503ServiceUnavailable);
+        return ApiError(
+            http,
+            StatusCodes.Status503ServiceUnavailable,
+            "The AI service is temporarily unavailable. Please try again in a moment.");
     }
 
-    return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+    return ApiError(
+        http,
+        StatusCodes.Status500InternalServerError,
+        "Something went wrong while processing the AI request. Please try again later.");
+}
+
+static IResult? ValidateUserId(HttpContext http, int userId)
+{
+    if (userId <= 0)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "User ID must be valid.");
+    }
+
+    return null;
 }
 
 // Deterministic, non-AI comparison of one recipe's ingredient list against
@@ -341,23 +371,29 @@ static GeneratedRecipe? ParseGeneratedRecipe(string content)
 
 // ---------- Endpoints ----------
 
-app.MapPost("/api/ai/assistant", async (ChatRequest req, Kernel kernel) =>
+app.MapPost("/api/ai/assistant", async (ChatRequest? req, Kernel kernel, HttpContext http) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Message))
-        return Results.BadRequest(new { error = "Message cannot be empty." });
+    if (req == null || string.IsNullOrWhiteSpace(req.Message))
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Message cannot be empty.");
+    }
 
     try
     {
-        // TODO: once JWT auth exists, replace this with the real authenticated user id
         int userId = 1;
 
         var chat = kernel.GetRequiredService<IChatCompletionService>();
         var history = new ChatHistory();
+
         history.AddSystemMessage(
             $"You are a friendly recipe and meal-planning assistant. " +
             $"The current user's id is {userId}. Use the RecipeData plugin " +
             $"functions to look up their recipes or meal plan before answering.");
-        history.AddUserMessage(req.Message);
+
+        history.AddUserMessage(req.Message.Trim());
 
         var settings = new OpenAIPromptExecutionSettings
         {
@@ -365,92 +401,158 @@ app.MapPost("/api/ai/assistant", async (ChatRequest req, Kernel kernel) =>
         };
 
         var result = await chat.GetChatMessageContentAsync(history, settings, kernel);
+
         return Results.Ok(new { reply = result.Content });
     }
     catch (Exception ex)
     {
-        return HandleAiError(ex);
+        return HandleAiError(ex, http);
     }
 });
 
-app.MapPost("/api/ai/suggest-meal", async (Kernel kernel) =>
+app.MapPost("/api/ai/suggest-meal", async (Kernel kernel, HttpContext http) =>
 {
     try
     {
-        int userId = 1; // TODO: replace with real authenticated user id later
+        int userId = 1;
 
         var chat = kernel.GetRequiredService<IChatCompletionService>();
         var history = new ChatHistory();
+
         history.AddSystemMessage(
             $"You are a meal-planning assistant. The current user's id is {userId}. " +
             $"Use the RecipeData plugin to look at their saved recipes, then suggest " +
             $"ONE good dinner option from those recipes with a one-sentence reason why.");
+
         history.AddUserMessage("Suggest a meal for me.");
 
-        var settings = new OpenAIPromptExecutionSettings { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
+        var settings = new OpenAIPromptExecutionSettings
+        {
+            FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
+        };
+
         var result = await chat.GetChatMessageContentAsync(history, settings, kernel);
+
         return Results.Ok(new { reply = result.Content });
     }
     catch (Exception ex)
     {
-        return HandleAiError(ex);
+        return HandleAiError(ex, http);
     }
 });
 
-app.MapPost("/api/ai/summarize-recipes", async (Kernel kernel) =>
+app.MapPost("/api/ai/summarize-recipes", async (Kernel kernel, HttpContext http) =>
 {
     try
     {
-        int userId = 1; // TODO: replace with real authenticated user id later
+        int userId = 1;
 
         var chat = kernel.GetRequiredService<IChatCompletionService>();
         var history = new ChatHistory();
+
         history.AddSystemMessage(
             $"You are a recipe assistant. The current user's id is {userId}. " +
             $"Use the RecipeData plugin to fetch their saved recipes, then write a short, " +
-            $"friendly summary of what kinds of meals they tend to save (cuisines, ingredients, patterns).");
+            $"friendly summary of what kinds of meals they tend to save.");
+
         history.AddUserMessage("Summarize my saved recipes.");
 
-        var settings = new OpenAIPromptExecutionSettings { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
+        var settings = new OpenAIPromptExecutionSettings
+        {
+            FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
+        };
+
         var result = await chat.GetChatMessageContentAsync(history, settings, kernel);
+
         return Results.Ok(new { reply = result.Content });
     }
     catch (Exception ex)
     {
-        return HandleAiError(ex);
+        return HandleAiError(ex, http);
     }
 });
 
 // ---------- Preferences ----------
 
-app.MapGet("/api/ai/preferences/{userId:int}", async (int userId, AppDbContext db) =>
+app.MapGet("/api/ai/preferences/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
 {
-    var prefs = await db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
-    if (prefs == null)
-        return Results.Ok(new { goal = "maintain", dietType = "none", allergies = "" });
+    var userIdError = ValidateUserId(http, userId);
+    if (userIdError != null)
+    {
+        return userIdError;
+    }
 
-    return Results.Ok(new { goal = prefs.Goal, dietType = prefs.DietType, allergies = prefs.Allergies });
+    var prefs = await db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
+
+    if (prefs == null)
+    {
+        return Results.Ok(new
+        {
+            goal = "maintain",
+            dietType = "none",
+            allergies = ""
+        });
+    }
+
+    return Results.Ok(new
+    {
+        goal = prefs.Goal,
+        dietType = prefs.DietType,
+        allergies = prefs.Allergies
+    });
 });
 
-app.MapPost("/api/ai/preferences", async (SavePreferencesRequest req, AppDbContext db) =>
+app.MapPost("/api/ai/preferences", async (SavePreferencesRequest? req, AppDbContext db, HttpContext http) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Goal) || string.IsNullOrWhiteSpace(req.DietType))
-        return Results.BadRequest(new { error = "Goal and diet type are required." });
+    if (req == null)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Preference data is required.");
+    }
+
+    if (req.UserId <= 0)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "User ID must be valid.");
+    }
+
+    if (string.IsNullOrWhiteSpace(req.Goal))
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Goal is required.");
+    }
+
+    if (string.IsNullOrWhiteSpace(req.DietType))
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Diet type is required.");
+    }
 
     var prefs = await db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == req.UserId);
+
     if (prefs == null)
     {
         prefs = new UserPreference { UserId = req.UserId };
         db.UserPreferences.Add(prefs);
     }
 
-    prefs.Goal = req.Goal;
-    prefs.DietType = req.DietType;
-    prefs.Allergies = req.Allergies ?? "";
+    prefs.Goal = req.Goal.Trim();
+    prefs.DietType = req.DietType.Trim();
+    prefs.Allergies = req.Allergies?.Trim() ?? "";
 
     await db.SaveChangesAsync();
+
     return Results.Ok(new { message = "Preferences saved." });
 });
+
 
 // ---------- Weekly Plan Generation ----------
 
@@ -460,32 +562,36 @@ app.MapPost("/api/ai/preferences", async (SavePreferencesRequest req, AppDbConte
 // then validates/repairs the result deterministically, so an invented recipe
 // or an off-diet/allergen recipe can never reach the reply — with or without
 // the AI available.
-app.MapPost("/api/ai/weekly-plan", async (AppDbContext db, IMealPlanSuggester suggester) =>
+
+app.MapPost("/api/ai/weekly-plan", async (AppDbContext db, IMealPlanSuggester suggester, HttpContext http) =>
 {
-    int userId = 1; // TODO: replace with real authenticated user id later
+    int userId = 1;
 
     try
     {
-        var recipes = await db.Recipes.Where(r => r.UserId == userId).ToListAsync();
+        var recipes = await db.Recipes
+            .Where(r => r.UserId == userId)
+            .ToListAsync();
+
         if (recipes.Count == 0)
         {
             return Results.Ok(new
             {
-                reply = "You don't have any saved recipes yet — add a few recipes first and I'll build your weekly plan from them."
+                reply = "You don't have any saved recipes yet. Add a few recipes first and I'll build your weekly plan from them."
             });
         }
 
         var prefs = await db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
 
         var allowedRecipes = AutoPlanBuilder.FilterByDietType(
-            AutoPlanBuilder.FilterAllergens(recipes, prefs), prefs);
+            AutoPlanBuilder.FilterAllergens(recipes, prefs),
+            prefs);
 
         if (allowedRecipes.Count == 0)
         {
             return Results.Ok(new
             {
-                reply = "None of your saved recipes fit your current diet type and allergies, so I can't build a plan. " +
-                        "Try saving some recipes that match your preferences, or update them above."
+                reply = "None of your saved recipes fit your current diet type and allergies. Try saving recipes that match your preferences or update your preferences."
             });
         }
 
@@ -494,29 +600,29 @@ app.MapPost("/api/ai/weekly-plan", async (AppDbContext db, IMealPlanSuggester su
 
         var recipeById = allowedRecipes.ToDictionary(r => r.Id);
         var sb = new StringBuilder();
+
         sb.AppendLine(
             $"Here's your weekly meal plan, built only from your saved recipes " +
             $"(goal: {prefs?.Goal ?? "maintain"}, diet: {prefs?.DietType ?? "none"}" +
             $"{(string.IsNullOrWhiteSpace(prefs?.Allergies) ? "" : $", avoiding: {prefs!.Allergies}")}). " +
             $"If this looks good, hit \"Save this plan\" and it'll be added to your meal planner.");
+
         sb.AppendLine();
 
         foreach (var day in AutoPlanBuilder.Days)
         {
             sb.AppendLine($"**{day}**");
+
             foreach (var slot in AutoPlanBuilder.Slots)
             {
                 var entry = week.First(w => w.Day == day && w.MealSlot == slot);
                 var title = recipeById[entry.RecipeId].Title;
                 sb.AppendLine($"- {char.ToUpper(slot[0])}{slot[1..]}: {title}");
             }
+
             sb.AppendLine();
         }
 
-        // Structured form of the exact same plan, so the client can send it
-        // straight to /api/mealplans/{userId}/apply-plan once the user
-        // confirms — no re-generation, no risk of saving something different
-        // from what was just previewed.
         var planForClient = week.Select(w => new
         {
             day = w.Day,
@@ -525,15 +631,15 @@ app.MapPost("/api/ai/weekly-plan", async (AppDbContext db, IMealPlanSuggester su
             recipeTitle = recipeById[w.RecipeId].Title
         }).ToList();
 
-        return Results.Ok(new { reply = sb.ToString().TrimEnd(), plan = planForClient });
-    }
-    catch (Microsoft.SemanticKernel.HttpOperationException ex) when (ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-    {
-        return Results.Problem(detail: "The AI service is rate-limited right now — please wait a moment and try again.", statusCode: 429);
+        return Results.Ok(new
+        {
+            reply = sb.ToString().TrimEnd(),
+            plan = planForClient
+        });
     }
     catch (Exception ex)
     {
-        return Results.Problem(detail: ex.Message, statusCode: 500);
+        return HandleAiError(ex, http);
     }
 });
 
@@ -542,22 +648,42 @@ app.MapPost("/api/ai/weekly-plan", async (AppDbContext db, IMealPlanSuggester su
 // dishes, ever. Ranks saved recipes (after allergy/diet filtering) by how
 // much of each recipe's ingredient list is already in the pantry.
 
-app.MapPost("/api/ai/what-can-i-make", async (AppDbContext db) =>
+app.MapPost("/api/ai/what-can-i-make", async (AppDbContext db, HttpContext http) =>
 {
     try
     {
-        int userId = 1; // TODO: replace with real user id
+        int userId = 1;
 
-        var recipes = await db.Recipes.Where(r => r.UserId == userId).ToListAsync();
+        var recipes = await db.Recipes
+            .Where(r => r.UserId == userId)
+            .ToListAsync();
+
         if (recipes.Count == 0)
-            return Results.Ok(new { reply = "You don't have any saved recipes yet — add a few and I'll tell you what you can make." });
+        {
+            return Results.Ok(new
+            {
+                reply = "You don't have any saved recipes yet. Add a few and I'll tell you what you can make."
+            });
+        }
 
         var prefs = await db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
-        var allowedRecipes = AutoPlanBuilder.FilterByDietType(AutoPlanBuilder.FilterAllergens(recipes, prefs), prefs);
 
-        var pantryNames = await db.Pantries.Where(p => p.UserId == userId).Select(p => p.IngredientName).ToListAsync();
+        var allowedRecipes = AutoPlanBuilder.FilterByDietType(
+            AutoPlanBuilder.FilterAllergens(recipes, prefs),
+            prefs);
+
+        var pantryNames = await db.Pantries
+            .Where(p => p.UserId == userId)
+            .Select(p => p.IngredientName)
+            .ToListAsync();
+
         if (pantryNames.Count == 0)
-            return Results.Ok(new { reply = "Your pantry is empty — add some ingredients and I'll tell you what you can make." });
+        {
+            return Results.Ok(new
+            {
+                reply = "Your pantry is empty. Add some ingredients and I'll tell you what you can make."
+            });
+        }
 
         var ranked = allowedRecipes
             .Select(r => AnalyseRecipeAgainstPantry(r, pantryNames))
@@ -572,20 +698,27 @@ app.MapPost("/api/ai/what-can-i-make", async (AppDbContext db) =>
         if (readyNow.Count > 0)
         {
             sb.AppendLine("You can make these right now from your saved recipes:");
-            foreach (var r in readyNow) sb.AppendLine($"- {r.Recipe.Title}");
+
+            foreach (var r in readyNow)
+            {
+                sb.AppendLine($"- {r.Recipe.Title}");
+            }
         }
         else
         {
-            sb.AppendLine("Nothing in your saved recipes is fully covered by your pantry yet — your closest matches are:");
+            sb.AppendLine("Nothing in your saved recipes is fully covered by your pantry yet. Your closest matches are:");
+
             foreach (var r in ranked)
+            {
                 sb.AppendLine($"- {r.Recipe.Title}: missing {string.Join(", ", r.Missing)}");
+            }
         }
 
         return Results.Ok(new { reply = sb.ToString().TrimEnd() });
     }
     catch (Exception ex)
     {
-        return HandleAiError(ex);
+        return HandleAiError(ex, http);
     }
 });
 
@@ -594,45 +727,65 @@ app.MapPost("/api/ai/what-can-i-make", async (AppDbContext db) =>
 // client, not typed free-text) so this always checks their actual saved
 // ingredient list rather than the AI's guess at a generic dish.
 
-app.MapPost("/api/ai/missing-ingredients", async (MealCheckRequest req, AppDbContext db) =>
+app.MapPost("/api/ai/missing-ingredients", async (MealCheckRequest? req, AppDbContext db, HttpContext http) =>
 {
-    if (req.RecipeId <= 0)
-        return Results.BadRequest(new { error = "Please pick one of your saved recipes." });
+    if (req == null || req.RecipeId <= 0)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Please pick one of your saved recipes.");
+    }
 
     try
     {
         int userId = 1; // TODO: replace with real user id
 
-        var recipe = await db.Recipes.FirstOrDefaultAsync(r => r.Id == req.RecipeId && r.UserId == userId);
-        if (recipe == null)
-            return Results.BadRequest(new { error = "Recipe not found." });
+        var recipe = await db.Recipes
+            .FirstOrDefaultAsync(r => r.Id == req.RecipeId && r.UserId == userId);
 
-        var pantryNames = await db.Pantries.Where(p => p.UserId == userId).Select(p => p.IngredientName).ToListAsync();
+        if (recipe == null)
+        {
+            return ApiError(
+                http,
+                StatusCodes.Status404NotFound,
+                "Recipe not found.");
+        }
+
+        var pantryNames = await db.Pantries
+            .Where(p => p.UserId == userId)
+            .Select(p => p.IngredientName)
+            .ToListAsync();
+
         var (_, _, missing) = AnalyseRecipeAgainstPantry(recipe, pantryNames);
 
         var allIngredients = recipe.Ingredients
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToList();
-        var have = allIngredients.Except(missing, StringComparer.OrdinalIgnoreCase).ToList();
+
+        var have = allIngredients
+            .Except(missing, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         var sb = new StringBuilder();
+
         sb.AppendLine($"**{recipe.Title}**");
         sb.AppendLine();
-        sb.AppendLine("✅ Ingredients you have:");
+        sb.AppendLine("Ingredients you have:");
         sb.AppendLine(have.Count > 0 ? string.Join("\n", have.Select(i => $"- {i}")) : "- (none yet)");
         sb.AppendLine();
-        sb.AppendLine("❌ Ingredients you still need to buy:");
+        sb.AppendLine("Ingredients you still need to buy:");
         sb.AppendLine(missing.Count > 0 ? string.Join("\n", missing.Select(i => $"- {i}")) : "- (none — you have it all!)");
         sb.AppendLine();
         sb.AppendLine(missing.Count == 0
-            ? "You can make this now! 🎉"
-            : $"You're missing {missing.Count} ingredient(s) — grab those and you're set.");
+            ? "You can make this now."
+            : $"You're missing {missing.Count} ingredient(s).");
 
         return Results.Ok(new { reply = sb.ToString().TrimEnd() });
     }
     catch (Exception ex)
     {
-        return HandleAiError(ex);
+        return HandleAiError(ex, http);
     }
 });
 
@@ -641,40 +794,47 @@ app.MapPost("/api/ai/missing-ingredients", async (MealCheckRequest req, AppDbCon
 // shortcut for when the user wants something new. NEVER used to answer
 // "what can I make" or the weekly plan; those stay grounded in saved recipes.
 
-app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest req, Kernel kernel) =>
+app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest? req, Kernel kernel, HttpContext http) =>
 {
     try
     {
-        int userId = 1; // TODO: replace with real user id
+        int userId = 1;
+        var craving = req?.Craving?.Trim();
 
         var chat = kernel.GetRequiredService<IChatCompletionService>();
         var history = new ChatHistory();
+
         history.AddSystemMessage(
             $"You are a creative cooking assistant. The current user's id is {userId}. " +
             $"First call get_user_preferences to check their goal, diet type, and allergies. " +
             $"NEVER include any ingredient matching their listed allergies, even partially, and " +
-            $"respect their diet type (e.g. no meat for vegetarian, no meat/dairy/egg for vegan, " +
-            $"no pork/alcohol for halal). Invent ONE brand-new recipe" +
-            (string.IsNullOrWhiteSpace(req.Craving) ? "." : $" involving: {req.Craving}.") +
+            $"respect their diet type. Invent ONE brand-new recipe" +
+            (string.IsNullOrWhiteSpace(craving) ? "." : $" involving: {craving}.") +
             " Respond with ONLY a JSON object, no prose, no markdown fences, in the form: " +
             "{\"title\":\"...\",\"category\":\"Breakfast|Veggie|Dessert|Thai|Grilled|Pasta|Soup|Salad|Sandwich|Curry|Seafood|Mexican|Italian|Asian|Mediterranean|Comfort Food|Quick & Easy|Healthy|Kids Friendly\"," +
             "\"ingredients\":\"comma, separated, list\",\"instructions\":\"numbered steps as one string\"," +
-            "\"dietRestriction\":\"none|vegetarian|vegan|gluten-free|dairy-free|nut-free|low-carb|paleo|low-sodium|sugar-free|whole30|mediterranean|pescatarian\"," +
+            "\"dietRestriction\":\"none|vegetarian|vegan|gluten-free|dairy-free|nut-free|low-carb|paleo|low-sodium|sugar-free|whole30|mediterranean|pescatarian|halal\"," +
             "\"allergens\":\"comma, separated, allergens, or, empty, string\"," +
             "\"imageUrl\":\"\"}");
-        history.AddUserMessage(string.IsNullOrWhiteSpace(req.Craving)
-            ? "Surprise me with a new recipe."
-            : $"Come up with a new recipe using {req.Craving}.");
 
-        var settings = new OpenAIPromptExecutionSettings { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
+        history.AddUserMessage(string.IsNullOrWhiteSpace(craving)
+            ? "Surprise me with a new recipe."
+            : $"Come up with a new recipe using {craving}.");
+
+        var settings = new OpenAIPromptExecutionSettings
+        {
+            FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
+        };
+
         var result = await chat.GetChatMessageContentAsync(history, settings, kernel);
 
         var parsed = ParseGeneratedRecipe(result.Content ?? "");
+
         if (parsed == null)
         {
             return Results.Ok(new
             {
-                reply = result.Content ?? "Sorry, I couldn't come up with a recipe that time — try again.",
+                reply = result.Content ?? "Sorry, I couldn't come up with a recipe that time. Please try again.",
                 recipe = (object?)null
             });
         }
@@ -683,22 +843,44 @@ app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest req, Kernel 
             $"Diet: {parsed.DietRestriction}\n" +
             (string.IsNullOrWhiteSpace(parsed.Allergens) ? "" : $"Allergens: {parsed.Allergens}\n\n") +
             $"Ingredients: {parsed.Ingredients}\n\nInstructions:\n{parsed.Instructions}";
+
         return Results.Ok(new { reply, recipe = parsed });
     }
     catch (Exception ex)
     {
-        return HandleAiError(ex);
+        return HandleAiError(ex, http);
     }
 });
 
 // ---------- Save a generated (or manually written) recipe ----------
 
-app.MapPost("/api/recipes", async (SaveRecipeRequest req, AppDbContext db) =>
+app.MapPost("/api/recipes", async (SaveRecipeRequest? req, AppDbContext db, HttpContext http) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Title) || string.IsNullOrWhiteSpace(req.Ingredients))
-        return Results.BadRequest(new { error = "Title and ingredients are required." });
+    if (req == null)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Recipe data is required.");
+    }
 
-    int userId = 1; // TODO: replace with real user id
+    if (string.IsNullOrWhiteSpace(req.Title))
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Recipe title is required.");
+    }
+
+    if (string.IsNullOrWhiteSpace(req.Ingredients))
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Ingredients are required.");
+    }
+
+    int userId = 1;
 
     var recipe = new Recipe
     {
@@ -716,24 +898,30 @@ app.MapPost("/api/recipes", async (SaveRecipeRequest req, AppDbContext db) =>
     db.Recipes.Add(recipe);
     await db.SaveChangesAsync();
 
-    // Handle category assignments
     if (req.CategoryIds != null && req.CategoryIds.Length > 0)
     {
-        foreach (var categoryIdStr in req.CategoryIds)
+        foreach (var categoryIdText in req.CategoryIds)
         {
-            if (int.TryParse(categoryIdStr, out var categoryId))
+            if (!int.TryParse(categoryIdText, out var categoryId))
             {
-                var categoryExists = await db.RecipeCategories.AnyAsync(c => c.Id == categoryId);
-                if (categoryExists)
+                return ApiError(
+                    http,
+                    StatusCodes.Status400BadRequest,
+                    $"Invalid category ID: {categoryIdText}.");
+            }
+
+            var categoryExists = await db.RecipeCategories.AnyAsync(c => c.Id == categoryId);
+
+            if (categoryExists)
+            {
+                db.RecipeCategoryAssignments.Add(new RecipeCategoryAssignment
                 {
-                    db.RecipeCategoryAssignments.Add(new RecipeCategoryAssignment
-                    {
-                        RecipeId = recipe.Id,
-                        RecipeCategoryId = categoryId
-                    });
-                }
+                    RecipeId = recipe.Id,
+                    RecipeCategoryId = categoryId
+                });
             }
         }
+
         await db.SaveChangesAsync();
     }
     else if (!string.IsNullOrWhiteSpace(recipe.Category))
@@ -750,17 +938,30 @@ app.MapPost("/api/recipes", async (SaveRecipeRequest req, AppDbContext db) =>
                 RecipeId = recipe.Id,
                 RecipeCategoryId = categoryId.Value
             });
+
             await db.SaveChangesAsync();
         }
     }
 
-    return Results.Ok(new { recipe.Id, recipe.Title, recipe.Category, recipe.ImageUrl });
+    return Results.Ok(new
+    {
+        recipe.Id,
+        recipe.Title,
+        recipe.Category,
+        recipe.ImageUrl
+    });
 });
 
 // ---------- Dashboard Endpoints ----------
 
-app.MapGet("/api/dashboard/stats/{userId:int}", async (int userId, AppDbContext db) =>
+app.MapGet("/api/dashboard/stats/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
 {
+    var userIdError = ValidateUserId(http, userId);
+    if (userIdError != null)
+    {
+        return userIdError;
+    }
+
     var totalRecipes = await db.Recipes.CountAsync(r => r.UserId == userId);
     var totalMealPlans = await db.MealPlans.CountAsync(m => m.UserId == userId);
 
@@ -771,17 +972,32 @@ app.MapGet("/api/dashboard/stats/{userId:int}", async (int userId, AppDbContext 
     });
 });
 
-app.MapGet("/api/dashboard/recent-recipes/{userId:int}", async (int userId, AppDbContext db) =>
+app.MapGet("/api/dashboard/recent-recipes/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
 {
+    var userIdError = ValidateUserId(http, userId);
+    if (userIdError != null)
+    {
+        return userIdError;
+    }
+
     var recentRecipes = await db.Recipes
         .Where(r => r.UserId == userId)
         .OrderByDescending(r => r.Id)
         .Take(6)
-        .Select(r => new { r.Id, r.Title, r.Category, r.Ingredients, r.ImageUrl, r.OwnerName, r.DietRestriction })
+        .Select(r => new
+        {
+            r.Id,
+            r.Title,
+            r.Category,
+            r.Ingredients,
+            r.ImageUrl,
+            r.OwnerName,
+            r.DietRestriction
+        })
         .ToListAsync();
 
-    // Load category assignments for each recipe
     var recipeIds = recentRecipes.Select(r => r.Id).ToList();
+
     var categoryAssignments = await db.RecipeCategoryAssignments
         .Where(rca => recipeIds.Contains(rca.RecipeId))
         .Include(rca => rca.RecipeCategory)
@@ -798,15 +1014,28 @@ app.MapGet("/api/dashboard/recent-recipes/{userId:int}", async (int userId, AppD
         r.DietRestriction,
         Categories = categoryAssignments
             .Where(ca => ca.RecipeId == r.Id)
-            .Select(ca => new { ca.RecipeCategory.Id, ca.RecipeCategory.Name, ca.RecipeCategory.Emoji, ca.RecipeCategory.ColorKey })
+            .Select(ca => new
+            {
+                ca.RecipeCategory.Id,
+                ca.RecipeCategory.Name,
+                ca.RecipeCategory.Emoji,
+                ca.RecipeCategory.ColorKey
+            })
             .ToList()
     }).ToList();
 
     return Results.Ok(result);
 });
 
-app.MapGet("/api/dashboard/weekly-summary/{userId:int}", async (int userId, AppDbContext db) =>
+
+app.MapGet("/api/dashboard/weekly-summary/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
 {
+    var userIdError = ValidateUserId(http, userId);
+    if (userIdError != null)
+    {
+        return userIdError;
+    }
+
     var weeklyPlans = await db.MealPlans
         .Where(m => m.UserId == userId)
         .Include(m => m.Recipe)
@@ -819,7 +1048,11 @@ app.MapGet("/api/dashboard/weekly-summary/{userId:int}", async (int userId, AppD
         .Select(g => new
         {
             Day = g.Key,
-            Meals = g.Select(m => new { m.MealSlot, RecipeTitle = m.Recipe.Title })
+            Meals = g.Select(m => new
+            {
+                m.MealSlot,
+                RecipeTitle = m.Recipe.Title
+            })
         })
         .ToList();
 
@@ -828,11 +1061,18 @@ app.MapGet("/api/dashboard/weekly-summary/{userId:int}", async (int userId, AppD
 
 // "Top Recipe Categories" tiles shown on the user dashboard.
 // Fully managed by admins via AdminController (create/edit/remove).
+
 app.MapGet("/api/dashboard/categories", async (AppDbContext db) =>
 {
     var categories = await db.RecipeCategories
         .OrderBy(c => c.Name)
-        .Select(c => new { c.Id, c.Name, c.Emoji, c.ColorKey })
+        .Select(c => new
+        {
+            c.Id,
+            c.Name,
+            c.Emoji,
+            c.ColorKey
+        })
         .ToListAsync();
 
     return Results.Ok(categories);
@@ -840,8 +1080,14 @@ app.MapGet("/api/dashboard/categories", async (AppDbContext db) =>
 
 // ---------- Pantry Endpoints ----------
 
-app.MapGet("/api/pantry/{userId:int}", async (int userId, AppDbContext db) =>
+app.MapGet("/api/pantry/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
 {
+    var userIdError = ValidateUserId(http, userId);
+    if (userIdError != null)
+    {
+        return userIdError;
+    }
+
     var pantryItems = await db.Pantries
         .Where(p => p.UserId == userId)
         .OrderBy(p => p.Category)
@@ -851,19 +1097,58 @@ app.MapGet("/api/pantry/{userId:int}", async (int userId, AppDbContext db) =>
     return Results.Ok(pantryItems);
 });
 
-app.MapPost("/api/pantry", async (PantryRequest req, AppDbContext db) =>
+app.MapPost("/api/pantry", async (PantryRequest? req, AppDbContext db, HttpContext http) =>
 {
-    if (string.IsNullOrWhiteSpace(req.IngredientName) || string.IsNullOrWhiteSpace(req.Category))
-        return Results.BadRequest(new { error = "Ingredient name and category are required." });
+    if (req == null)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Pantry item data is required.");
+    }
+
+    if (req.UserId <= 0)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "User ID must be valid.");
+    }
+
+    if (string.IsNullOrWhiteSpace(req.IngredientName))
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Ingredient name is required.");
+    }
+
+    if (string.IsNullOrWhiteSpace(req.Category))
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Category is required.");
+    }
+
+    if (req.Quantity < 0)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Quantity cannot be negative.");
+    }
 
     var pantryItem = new Pantry
     {
         UserId = req.UserId,
-        IngredientName = req.IngredientName,
-        Category = req.Category,
+        IngredientName = req.IngredientName.Trim(),
+        Category = req.Category.Trim(),
         Quantity = req.Quantity > 0 ? req.Quantity : 1,
-        Unit = req.Unit ?? "",
-        ExpiryDate = req.ExpiryDate
+        Unit = req.Unit?.Trim() ?? "",
+        ExpiryDate = req.ExpiryDate == default
+            ? DateTime.UtcNow.AddDays(14)
+            : req.ExpiryDate
     };
 
     db.Pantries.Add(pantryItem);
@@ -872,31 +1157,90 @@ app.MapPost("/api/pantry", async (PantryRequest req, AppDbContext db) =>
     return Results.Ok(pantryItem);
 });
 
-app.MapPut("/api/pantry/{id:int}", async (int id, PantryRequest req, AppDbContext db) =>
+app.MapPut("/api/pantry/{id:int}", async (int id, PantryRequest? req, AppDbContext db, HttpContext http) =>
 {
+    if (id <= 0)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Pantry item ID must be valid.");
+    }
+
+    if (req == null)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Pantry item data is required.");
+    }
+
     var pantryItem = await db.Pantries.FindAsync(id);
+
     if (pantryItem == null)
-        return Results.NotFound();
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status404NotFound,
+            "Pantry item not found.");
+    }
 
-    if (string.IsNullOrWhiteSpace(req.IngredientName) || string.IsNullOrWhiteSpace(req.Category))
-        return Results.BadRequest(new { error = "Ingredient name and category are required." });
+    if (string.IsNullOrWhiteSpace(req.IngredientName))
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Ingredient name is required.");
+    }
 
-    pantryItem.IngredientName = req.IngredientName;
-    pantryItem.Category = req.Category;
+    if (string.IsNullOrWhiteSpace(req.Category))
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Category is required.");
+    }
+
+    if (req.Quantity < 0)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Quantity cannot be negative.");
+    }
+
+    pantryItem.IngredientName = req.IngredientName.Trim();
+    pantryItem.Category = req.Category.Trim();
     pantryItem.Quantity = req.Quantity > 0 ? req.Quantity : 1;
-    pantryItem.Unit = req.Unit ?? "";
-    pantryItem.ExpiryDate = req.ExpiryDate;
+    pantryItem.Unit = req.Unit?.Trim() ?? "";
+    pantryItem.ExpiryDate = req.ExpiryDate == default
+        ? pantryItem.ExpiryDate
+        : req.ExpiryDate;
 
     await db.SaveChangesAsync();
 
     return Results.Ok(pantryItem);
 });
 
-app.MapDelete("/api/pantry/{id:int}", async (int id, AppDbContext db) =>
+app.MapDelete("/api/pantry/{id:int}", async (int id, AppDbContext db, HttpContext http) =>
 {
+    if (id <= 0)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Pantry item ID must be valid.");
+    }
+
     var pantryItem = await db.Pantries.FindAsync(id);
+
     if (pantryItem == null)
-        return Results.NotFound();
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status404NotFound,
+            "Pantry item not found.");
+    }
 
     db.Pantries.Remove(pantryItem);
     await db.SaveChangesAsync();
@@ -904,83 +1248,153 @@ app.MapDelete("/api/pantry/{id:int}", async (int id, AppDbContext db) =>
     return Results.Ok(new { message = "Item deleted successfully." });
 });
 
-// ---------- Receipt Parser (scan grocery receipt → extract items → add to pantry) ----------
+// ---------- Receipt Parser ----------
 
-app.MapPost("/api/receipt/parse", async (HttpRequest req) =>
+app.MapPost("/api/receipt/parse", async (HttpRequest req, HttpContext http) =>
 {
-    if (visionChat is null)
-        return Results.Problem(detail: "AI belum dikonfigurasi (GoogleAI:ApiKey kosong).", statusCode: 503);
+    var chatClient = visionChat;
+
+    if (chatClient is null)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status503ServiceUnavailable,
+            "AI is not configured. Please set the GoogleAI API key.");
+    }
+
+    if (!req.HasFormContentType)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Please upload an image using form-data.");
+    }
 
     var form = await req.ReadFormAsync();
     var file = form.Files["image"];
 
     if (file is null || file.Length == 0)
-        return Results.BadRequest(new { error = "No image uploaded." });
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "No image uploaded.");
+    }
+
+    if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Uploaded file must be an image.");
+    }
+
+    if (file.Length > 5_000_000)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Image is too large. Please upload an image under 5 MB.");
+    }
 
     using var ms = new MemoryStream();
     await file.CopyToAsync(ms);
+
     var image = new DataContent(ms.ToArray(), file.ContentType ?? "image/jpeg");
 
     const string prompt =
         "Read this grocery receipt. Extract every grocery item purchased. " +
-        "For each item return its name, a numeric quantity if shown (e.g. '2', '500'; " +
-        "default to '1' if not shown), and a unit of measurement (e.g. 'g', 'kg', 'ml', " +
-        "'l', 'piece', 'bottle', 'can', 'bag', 'loaf'; use 'piece' if no unit is printed " +
-        "and it's a countable item). " +
-        "Ignore prices, totals, tax, store name, and dates — only the grocery items matter. " +
+        "For each item return its name, a numeric quantity if shown, and a unit of measurement. " +
+        "Ignore prices, totals, tax, store name, and dates. " +
         "Return as a JSON array like: [{\"name\":\"chicken breast\",\"quantity\":\"500\",\"unit\":\"g\"}, ...]";
 
-    var message = new ChatMessage(ChatRole.User, [new Microsoft.Extensions.AI.TextContent(prompt), image]);
+    var message = new ChatMessage(
+        ChatRole.User,
+        [new Microsoft.Extensions.AI.TextContent(prompt), image]);
 
     try
     {
-        var result = await visionChat.GetResponseAsync<List<ParsedItem>>([message]);
+        var result = await chatClient.GetResponseAsync<List<ParsedItem>>([message]);
         return Results.Ok(result.Result ?? new List<ParsedItem>());
     }
     catch (Exception ex)
     {
-        return Results.Problem(detail: ex.Message, statusCode: 500);
+        return HandleAiError(ex, http);
     }
 });
 
-// ---------- Object Detection (photo of fridge/pantry shelf -> detected food items) ----------
+// ---------- Object Detection ----------
 
-app.MapPost("/api/detect", async (HttpRequest req) =>
+app.MapPost("/api/detect", async (HttpRequest req, HttpContext http) =>
 {
-    if (visionChat is null)
-        return Results.Problem(detail: "AI belum dikonfigurasi (GoogleAI:ApiKey kosong).", statusCode: 503);
+    var chatClient = visionChat;
+
+    if (chatClient is null)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status503ServiceUnavailable,
+            "AI is not configured. Please set the GoogleAI API key.");
+    }
+
+    if (!req.HasFormContentType)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Please upload an image using form-data.");
+    }
 
     var form = await req.ReadFormAsync();
     var file = form.Files["image"];
 
     if (file is null || file.Length == 0)
-        return Results.BadRequest(new { error = "No image uploaded." });
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "No image uploaded.");
+    }
+
+    if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Uploaded file must be an image.");
+    }
+
+    if (file.Length > 5_000_000)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "Image is too large. Please upload an image under 5 MB.");
+    }
 
     using var ms = new MemoryStream();
     await file.CopyToAsync(ms);
+
     var image = new DataContent(ms.ToArray(), file.ContentType ?? "image/jpeg");
 
     const string detectPrompt =
         "Detect every prominent food or grocery item in this image. " +
-        "For each object return a short label, a confidence " +
-        "between 0 and 1, a tight bounding box as yMin, " +
-        "xMin, yMax, xMax normalised to a 0-1000 scale, and a typical unit " +
-        "of measurement for that item (e.g. 'piece', 'bottle', 'carton', 'loaf', " +
-        "'can', 'bag', 'kg' — pick whichever is most natural for how that item is " +
-        "normally counted or measured). " +
-        "Also write a one-sentence summary of the scene. " +
-        "If no objects are found, return an empty list.";
+        "For each object return a short label, a confidence between 0 and 1, " +
+        "a bounding box as yMin, xMin, yMax, xMax normalised to a 0-1000 scale, " +
+        "and a typical unit of measurement. Also write a one-sentence summary.";
 
-    var message = new ChatMessage(ChatRole.User, [new Microsoft.Extensions.AI.TextContent(detectPrompt), image]);
+    var message = new ChatMessage(
+        ChatRole.User,
+        [new Microsoft.Extensions.AI.TextContent(detectPrompt), image]);
 
     try
     {
-        var result = await visionChat.GetResponseAsync<DetectionResult>([message]);
+        var result = await chatClient.GetResponseAsync<DetectionResult>([message]);
         return Results.Ok(result.Result);
     }
     catch (Exception ex)
     {
-        return Results.Problem(detail: ex.Message, statusCode: 500);
+        return HandleAiError(ex, http);
     }
 });
 
@@ -991,18 +1405,28 @@ app.MapPost("/api/detect", async (HttpRequest req) =>
 // A purely numeric quantity (e.g. "2") is treated as a count and summed;
 // anything else (e.g. "500g", "1 bottle") is treated as a descriptive unit,
 // and counts as a single occurrence of that item.
-app.MapPost("/api/pantry/bulk-add", async (List<ParsedItem> items, AppDbContext db) =>
+
+app.MapPost("/api/pantry/bulk-add", async (List<ParsedItem>? items, AppDbContext db, HttpContext http) =>
 {
     int userId = 1; // TODO: replace with real authenticated user id later
 
     if (items == null || items.Count == 0)
-        return Results.BadRequest(new { error = "No items provided." });
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "No items provided.");
+    }
 
-    var grouped = new Dictionary<string, (string DisplayName, int Count, string? Unit)>(StringComparer.OrdinalIgnoreCase);
+    var grouped = new Dictionary<string, (string DisplayName, int Count, string? Unit)>(
+        StringComparer.OrdinalIgnoreCase);
 
     foreach (var item in items)
     {
-        if (string.IsNullOrWhiteSpace(item.Name)) continue;
+        if (string.IsNullOrWhiteSpace(item.Name))
+        {
+            continue;
+        }
 
         var name = item.Name.Trim();
         var key = name.ToLowerInvariant();
@@ -1014,17 +1438,25 @@ app.MapPost("/api/pantry/bulk-add", async (List<ParsedItem> items, AppDbContext 
         {
             // New-style: quantity is a real number, unit is separate.
             unit = item.Unit.Trim();
+
             if (int.TryParse(item.Quantity?.Trim(), out var parsedCount) && parsedCount > 0)
+            {
                 count = parsedCount;
+            }
         }
         else if (!string.IsNullOrWhiteSpace(item.Quantity))
         {
             // Legacy fallback: quantity text alone, e.g. "500g" or "2".
             var qtyText = item.Quantity.Trim();
+
             if (int.TryParse(qtyText, out var parsedCount) && parsedCount > 0)
+            {
                 count = parsedCount;
+            }
             else
+            {
                 unit = qtyText;
+            }
         }
 
         if (grouped.TryGetValue(key, out var existingGroup))
@@ -1041,16 +1473,28 @@ app.MapPost("/api/pantry/bulk-add", async (List<ParsedItem> items, AppDbContext 
         }
     }
 
+    if (grouped.Count == 0)
+    {
+        return ApiError(
+            http,
+            StatusCodes.Status400BadRequest,
+            "No valid pantry items were provided.");
+    }
+
     foreach (var group in grouped.Values)
     {
         var existing = await db.Pantries.FirstOrDefaultAsync(p =>
-            p.UserId == userId && p.IngredientName.ToLower() == group.DisplayName.ToLower());
+            p.UserId == userId &&
+            p.IngredientName.ToLower() == group.DisplayName.ToLower());
 
         if (existing != null)
         {
             existing.Quantity += group.Count;
+
             if (!string.IsNullOrWhiteSpace(group.Unit))
+            {
                 existing.Unit = group.Unit;
+            }
         }
         else
         {
@@ -1067,13 +1511,20 @@ app.MapPost("/api/pantry/bulk-add", async (List<ParsedItem> items, AppDbContext 
     }
 
     await db.SaveChangesAsync();
-    return Results.Ok(new { message = $"{items.Count} item(s) added to pantry." });
+
+    return Results.Ok(new { message = $"{grouped.Count} item(s) added to pantry." });
 });
 
 // ---------- Profile/Chart Endpoints ----------
 
-app.MapGet("/api/profile/meal-stats/{userId:int}", async (int userId, AppDbContext db) =>
+app.MapGet("/api/profile/meal-stats/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
 {
+    var userIdError = ValidateUserId(http, userId);
+    if (userIdError != null)
+    {
+        return userIdError;
+    }
+
     var mealsByDay = await db.MealPlans
         .Where(m => m.UserId == userId)
         .GroupBy(m => m.Day)
@@ -1087,8 +1538,14 @@ app.MapGet("/api/profile/meal-stats/{userId:int}", async (int userId, AppDbConte
     return Results.Ok(mealsByDay);
 });
 
-app.MapGet("/api/profile/recent-activity/{userId:int}", async (int userId, AppDbContext db) =>
+app.MapGet("/api/profile/recent-activity/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
 {
+    var userIdError = ValidateUserId(http, userId);
+    if (userIdError != null)
+    {
+        return userIdError;
+    }
+
     var recentRecipes = await db.Recipes
         .Where(r => r.UserId == userId)
         .OrderByDescending(r => r.Id)
@@ -1097,7 +1554,7 @@ app.MapGet("/api/profile/recent-activity/{userId:int}", async (int userId, AppDb
         {
             Type = "Recipe",
             Title = r.Title,
-            Timestamp = DateTime.Now.AddDays(-r.Id) // Simulated timestamp
+            Timestamp = DateTime.Now.AddDays(-r.Id)
         })
         .ToListAsync();
 
@@ -1109,11 +1566,12 @@ app.MapGet("/api/profile/recent-activity/{userId:int}", async (int userId, AppDb
         {
             Type = "Meal Plan",
             Title = $"{m.Day} - {m.MealSlot}",
-            Timestamp = DateTime.Now.AddDays(-m.Id) // Simulated timestamp
+            Timestamp = DateTime.Now.AddDays(-m.Id)
         })
         .ToListAsync();
 
-    var allActivity = recentRecipes.Concat(recentMealPlans)
+    var allActivity = recentRecipes
+        .Concat(recentMealPlans)
         .OrderByDescending(a => a.Timestamp)
         .ToList();
 
