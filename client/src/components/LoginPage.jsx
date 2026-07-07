@@ -67,13 +67,8 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
             }}
           />
           <div className="relative">
-            <div className="flex items-center gap-2.5">
-              <span className="w-9 h-9 rounded-xl bg-white/10 backdrop-blur grid place-items-center font-bold text-lg text-white border border-white/20">
-                R
-              </span>
-              <span className="font-semibold text-lg tracking-tight">
-                Nomly
-              </span>
+            <div className="flex items-center">
+              <img src="/Untitled design.png" alt="Nomly" className="h-30" />
             </div>
             <h1 className="font-bold text-3xl leading-tight mt-12">
               Welcome to

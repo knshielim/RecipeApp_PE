@@ -65,13 +65,8 @@ function RegistrationPage({ onGoToLogin }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-surface">
       <div className="w-full max-w-md soft-card soft-shadow p-8 sm:p-10">
-        <div className="flex items-center gap-2.5 mb-8">
-          <span className="w-9 h-9 rounded-xl bg-brand text-white grid place-items-center font-bold text-lg">
-            R
-          </span>
-          <span className="font-semibold text-lg text-slate-900 tracking-tight">
-            Nomly Portal
-          </span>
+        <div className="flex items-center mb-8">
+          <img src="/NomlyLogo-Green.png" alt="Nomly" className="h-25" />
         </div>
 
         <h2 className="font-bold text-2xl text-slate-900">

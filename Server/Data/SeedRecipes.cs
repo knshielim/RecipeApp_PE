@@ -703,13 +703,6 @@ public static class SeedRecipes
             new Recipe
             {
                 UserId = 1,
-                Title = "Quesadilla",
-                Ingredients = "tortilla, cheese",
-                Category = "Quick & Easy"
-            },
-            new Recipe
-            {
-                UserId = 1,
                 Title = "Scrambled Eggs",
                 Ingredients = "eggs, butter, salt, pepper",
                 Category = "Quick & Easy"
@@ -749,13 +742,6 @@ public static class SeedRecipes
                 UserId = 1,
                 Title = "Pizza Bagels",
                 Ingredients = "bagels, tomato sauce, cheese, pepperoni",
-                Category = "Kids Friendly"
-            },
-            new Recipe
-            {
-                UserId = 1,
-                Title = "Macaroni and Cheese",
-                Ingredients = "macaroni, cheddar cheese, milk, butter",
                 Category = "Kids Friendly"
             },
             new Recipe
