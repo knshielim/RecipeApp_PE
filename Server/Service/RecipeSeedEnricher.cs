@@ -23,8 +23,7 @@ public static class RecipeSeedEnricher
 
         if (string.IsNullOrWhiteSpace(recipe.ImageUrl))
         {
-            var slug = Uri.EscapeDataString(recipe.Title.Replace(' ', '-').ToLowerInvariant());
-            recipe.ImageUrl = $"https://picsum.photos/seed/{slug}/640/400";
+            recipe.ImageUrl = $"/{recipe.Title}.png";
         }
 
         if (string.IsNullOrWhiteSpace(recipe.Steps))

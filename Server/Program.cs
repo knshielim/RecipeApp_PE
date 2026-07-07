@@ -428,6 +428,7 @@ using (var scope = app.Services.CreateScope())
         {
             existingRecipe.Ingredients = recipe.Ingredients;
             existingRecipe.Category = recipe.Category;
+            existingRecipe.ImageUrl = ""; // Force refresh to use local images
             RecipeSeedEnricher.Enrich(existingRecipe, index, ownerPool);
         }
         index++;
