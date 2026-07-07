@@ -1,8 +1,8 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Server.DTO;
 using Server.Models;
 using Server.Services;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 
 namespace ServerApi.Controllers;
 
@@ -23,19 +23,14 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public IActionResult Register([FromBody] RegisterRequestDTO request)
     {
-        if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
-            return BadRequest(new { message = "Username and password are required." });
-
-        if (request.Password.Length < 6)
-            return BadRequest(new { message = "Password must be at least 6 characters." });
-
-        var role = request.Role == "Admin" ? "Admin" : "User";
+        // DTO validation already checks:
+        // Username, Password, FullName, Email, PhoneNumber, DateOfBirth, Gender.
 
         var user = new User
         {
             Username = request.Username.Trim(),
             PasswordHash = UserStore.Hash(request.Password),
-            Role = role,
+            Role = "User", // Public registration should only create standard users.
             FullName = request.FullName.Trim(),
             Email = request.Email.Trim(),
             PhoneNumber = request.PhoneNumber.Trim(),
@@ -44,29 +39,48 @@ public class AuthController : ControllerBase
         };
 
         if (!_users.Add(user))
-            return Conflict(new { message = "Username is already taken." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status409Conflict,
+                "Username is already taken.");
+        }
 
-        return Ok(new { message = $"Account '{user.Username}' created as {user.Role}. You can now log in." });
+        return Ok(new
+        {
+            message = $"Account '{user.Username}' created successfully. You can now log in."
+        });
     }
 
     // POST api/auth/login
     [HttpPost("login")]
     public IActionResult Login([FromBody] LoginRequestDTO request)
     {
-        var username = request.Username?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(request.Password))
-            return Unauthorized(new { message = "Invalid credentials." });
+        // DTO validation already checks:
+        // Username, Password, Role.
+
+        var username = request.Username.Trim();
 
         if (!_users.Verify(username, request.Password, out var user) || user is null)
-            return Unauthorized(new { message = "Invalid credentials." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status401Unauthorized,
+                "Invalid username or password.");
+        }
 
         if (!user.IsActive)
-            return Unauthorized(new { message = "This account has been deactivated. Please contact an administrator." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status401Unauthorized,
+                "This account has been deactivated. Please contact an administrator.");
+        }
 
-        // The role chosen on the login page must match the account's actual role
-        if (!string.IsNullOrEmpty(request.Role) &&
-            !user.Role.Equals(request.Role, StringComparison.OrdinalIgnoreCase))
-            return Unauthorized(new { message = $"This account is not registered as {request.Role}." });
+        // The role chosen on the login page must match the account's actual role.
+        if (!user.Role.Equals(request.Role, StringComparison.OrdinalIgnoreCase))
+        {
+            return ErrorResponse(
+                StatusCodes.Status401Unauthorized,
+                $"This account is not registered as {request.Role}.");
+        }
 
         var token = _tokens.GenerateToken(user.Username, user.Role);
 
@@ -78,14 +92,28 @@ public class AuthController : ControllerBase
         });
     }
 
-    // GET api/auth/profile -- current user's account information
+    // GET api/auth/profile
     [Authorize]
     [HttpGet("profile")]
     public IActionResult GetProfile()
     {
         var name = User.Identity?.Name;
-        var user = name is null ? null : _users.Find(name);
-        if (user is null) return NotFound(new { message = "User not found." });
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return ErrorResponse(
+                StatusCodes.Status401Unauthorized,
+                "Not signed in.");
+        }
+
+        var user = _users.Find(name);
+
+        if (user is null)
+        {
+            return ErrorResponse(
+                StatusCodes.Status404NotFound,
+                "User not found.");
+        }
 
         return Ok(new
         {
@@ -101,19 +129,24 @@ public class AuthController : ControllerBase
         });
     }
 
-    // PUT api/auth/profile -- update current user's account information
+    // PUT api/auth/profile
     [Authorize]
     [HttpPut("profile")]
     public IActionResult UpdateProfile([FromBody] UpdateProfileDTO dto)
     {
+        // DTO validation already checks:
+        // FullName and Email required,
+        // Email format,
+        // optional PhoneNumber, DateOfBirth, and Gender format.
+
         var name = User.Identity?.Name;
-        if (name is null) return Unauthorized(new { message = "Not signed in." });
 
-        if (string.IsNullOrWhiteSpace(dto.FullName))
-            return BadRequest(new { message = "Full name is required." });
-
-        if (string.IsNullOrWhiteSpace(dto.Email) || !dto.Email.Contains('@'))
-            return BadRequest(new { message = "A valid email is required." });
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return ErrorResponse(
+                StatusCodes.Status401Unauthorized,
+                "Not signed in.");
+        }
 
         var ok = _users.UpdateProfile(
             name,
@@ -123,46 +156,89 @@ public class AuthController : ControllerBase
             dto.DateOfBirth.Trim(),
             dto.Gender.Trim());
 
-        if (!ok) return NotFound(new { message = "User not found." });
+        if (!ok)
+        {
+            return ErrorResponse(
+                StatusCodes.Status404NotFound,
+                "User not found.");
+        }
 
         return Ok(new { message = "Profile updated successfully." });
     }
 
-    // PUT api/auth/profile/picture -- update profile picture (data URL or clear with null/empty)
+    // PUT api/auth/profile/picture
     [Authorize]
     [HttpPut("profile/picture")]
     public IActionResult UpdateProfilePicture([FromBody] UpdateProfilePictureDTO dto)
     {
         var name = User.Identity?.Name;
-        if (name is null) return Unauthorized(new { message = "Not signed in." });
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return ErrorResponse(
+                StatusCodes.Status401Unauthorized,
+                "Not signed in.");
+        }
 
         var picture = dto.ProfilePicture?.Trim();
+
         if (!string.IsNullOrEmpty(picture))
         {
             if (!picture.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
-                return BadRequest(new { message = "Profile picture must be a valid image." });
+            {
+                return ErrorResponse(
+                    StatusCodes.Status400BadRequest,
+                    "Profile picture must be a valid image.");
+            }
 
             if (picture.Length > 600_000)
-                return BadRequest(new { message = "Profile picture is too large. Please use a smaller image." });
+            {
+                return ErrorResponse(
+                    StatusCodes.Status400BadRequest,
+                    "Profile picture is too large. Please use a smaller image.");
+            }
         }
 
         var ok = _users.UpdateProfilePicture(name, picture);
-        if (!ok) return NotFound(new { message = "User not found." });
+
+        if (!ok)
+        {
+            return ErrorResponse(
+                StatusCodes.Status404NotFound,
+                "User not found.");
+        }
 
         return Ok(new
         {
-            message = string.IsNullOrEmpty(picture) ? "Profile picture removed." : "Profile picture updated.",
+            message = string.IsNullOrEmpty(picture)
+                ? "Profile picture removed."
+                : "Profile picture updated.",
             profilePicture = string.IsNullOrEmpty(picture) ? null : picture
         });
     }
 
-    // GET api/auth/dashboard -- any authenticated user
+    // GET api/auth/dashboard
     [Authorize]
     [HttpGet("dashboard")]
     public IActionResult Dashboard()
     {
         var name = User.Identity?.Name ?? "stranger";
         var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "Unknown";
-        return Ok(new { message = $"Hello, {name}! You are logged in as {role}.", role });
+
+        return Ok(new
+        {
+            message = $"Hello, {name}! You are logged in as {role}.",
+            role
+        });
+    }
+
+    private ObjectResult ErrorResponse(int statusCode, string message)
+    {
+        return StatusCode(statusCode, new ApiErrorResponse
+        {
+            StatusCode = statusCode,
+            Message = message,
+            TraceId = HttpContext.TraceIdentifier
+        });
     }
 }

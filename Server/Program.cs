@@ -6,12 +6,15 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Microsoft.Extensions.AI;
+using Microsoft.AspNetCore.Mvc;
 using System.ClientModel;
 using OpenAI;
 using Microsoft.IdentityModel.Tokens;
 using Server.Services;
 using Server.Models;
 using Server.Data;
+using Server.Middleware;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,7 +54,29 @@ builder.Services.AddScoped<Kernel>(sp =>
 });
 
 // Auth and user services
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errors = context.ModelState
+                .Where(e => e.Value?.Errors.Count > 0)
+                .ToDictionary(
+                    e => e.Key,
+                    e => e.Value!.Errors.Select(x => x.ErrorMessage).ToArray()
+                );
+
+            var response = new Server.DTO.ApiErrorResponse
+            {
+                StatusCode = StatusCodes.Status400BadRequest,
+                Message = "Validation failed. Please check the submitted data.",
+                Errors = errors,
+                TraceId = context.HttpContext.TraceIdentifier
+            };
+
+            return new BadRequestObjectResult(response);
+        };
+    });
 builder.Services.AddSingleton<TokenService>();
 
 // UserStore needs to be scoped to access DbContext
@@ -87,6 +112,7 @@ builder.Services.AddAuthorization();
 // ================================================================
 
 var app = builder.Build();
+app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors();
 
 app.UseAuthentication();

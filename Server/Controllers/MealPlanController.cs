@@ -1,10 +1,9 @@
-using Server.DTO;
-using Server.Services;
-using Server.Models;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Text.RegularExpressions;
-
+using Server.DTO;
+using Server.Models;
+using Server.Services;
 
 namespace ServerApi.Controllers;
 
@@ -13,7 +12,6 @@ namespace ServerApi.Controllers;
 public class MealPlanController : ControllerBase
 {
     private static readonly string[] ValidDays = AutoPlanBuilder.Days;
-
     private static readonly string[] ValidSlots = AutoPlanBuilder.Slots;
 
     private readonly AppDbContext _db;
@@ -29,6 +27,13 @@ public class MealPlanController : ControllerBase
     [HttpGet("{userId:int}")]
     public async Task<IActionResult> GetMealPlans(int userId, [FromQuery] string? weekStart = null)
     {
+        if (userId <= 0)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "User ID must be valid.");
+        }
+
         var week = WeekDateHelper.ParseOrCurrent(weekStart);
 
         var plans = await _db.MealPlans
@@ -53,10 +58,23 @@ public class MealPlanController : ControllerBase
     [HttpGet("recipes/{userId:int}")]
     public async Task<IActionResult> GetRecipes(int userId)
     {
+        if (userId <= 0)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "User ID must be valid.");
+        }
+
         var recipes = await _db.Recipes
             .Where(r => r.UserId == userId)
             .OrderBy(r => r.Title)
-            .Select(r => new { r.Id, r.Title, r.Category, r.ImageUrl })
+            .Select(r => new
+            {
+                r.Id,
+                r.Title,
+                r.Category,
+                r.ImageUrl
+            })
             .ToListAsync();
 
         return Ok(recipes);
@@ -67,8 +85,12 @@ public class MealPlanController : ControllerBase
     public async Task<IActionResult> Create([FromBody] MealPlanRequestDTO request)
     {
         var week = WeekDateHelper.ParseOrCurrent(request.WeekStartDate);
-        var error = await ValidateRequest(request, week);
-        if (error != null) return error;
+
+        var error = await ValidateRequest(request);
+        if (error != null)
+        {
+            return error;
+        }
 
         var occupied = await _db.MealPlans.AnyAsync(m =>
             m.UserId == request.UserId &&
@@ -77,7 +99,11 @@ public class MealPlanController : ControllerBase
             m.MealSlot == request.MealSlot);
 
         if (occupied)
-            return Conflict(new { message = $"{request.Day} {request.MealSlot} already has a meal planned. Edit or remove it first." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status409Conflict,
+                $"{request.Day} {request.MealSlot} already has a meal planned. Edit or remove it first.");
+        }
 
         var plan = new MealPlan
         {
@@ -91,7 +117,14 @@ public class MealPlanController : ControllerBase
         _db.MealPlans.Add(plan);
         await _db.SaveChangesAsync();
 
-        return Ok(new { plan.Id, weekStartDate = week.ToString("yyyy-MM-dd"), plan.Day, plan.MealSlot, plan.RecipeId });
+        return Ok(new
+        {
+            plan.Id,
+            weekStartDate = week.ToString("yyyy-MM-dd"),
+            plan.Day,
+            plan.MealSlot,
+            plan.RecipeId
+        });
     }
 
     // PUT api/mealplans/{id}
@@ -99,12 +132,29 @@ public class MealPlanController : ControllerBase
     public async Task<IActionResult> Update(int id, [FromBody] MealPlanRequestDTO request)
     {
         var plan = await _db.MealPlans.FindAsync(id);
-        if (plan == null)
-            return NotFound(new { message = "Meal plan entry not found." });
 
-        var week = WeekDateHelper.ParseOrCurrent(request.WeekStartDate ?? plan.WeekStartDate.ToString("yyyy-MM-dd"));
-        var error = await ValidateRequest(request, week);
-        if (error != null) return error;
+        if (plan == null)
+        {
+            return ErrorResponse(
+                StatusCodes.Status404NotFound,
+                "Meal plan entry not found.");
+        }
+
+        if (plan.UserId != request.UserId)
+        {
+            return ErrorResponse(
+                StatusCodes.Status403Forbidden,
+                "You cannot update a meal plan entry that belongs to another user.");
+        }
+
+        var week = WeekDateHelper.ParseOrCurrent(
+            request.WeekStartDate ?? plan.WeekStartDate.ToString("yyyy-MM-dd"));
+
+        var error = await ValidateRequest(request);
+        if (error != null)
+        {
+            return error;
+        }
 
         var occupied = await _db.MealPlans.AnyAsync(m =>
             m.Id != id &&
@@ -114,7 +164,11 @@ public class MealPlanController : ControllerBase
             m.MealSlot == request.MealSlot);
 
         if (occupied)
-            return Conflict(new { message = $"{request.Day} {request.MealSlot} already has a meal planned." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status409Conflict,
+                $"{request.Day} {request.MealSlot} already has a meal planned.");
+        }
 
         plan.WeekStartDate = week;
         plan.Day = request.Day;
@@ -123,7 +177,14 @@ public class MealPlanController : ControllerBase
 
         await _db.SaveChangesAsync();
 
-        return Ok(new { plan.Id, weekStartDate = week.ToString("yyyy-MM-dd"), plan.Day, plan.MealSlot, plan.RecipeId });
+        return Ok(new
+        {
+            plan.Id,
+            weekStartDate = week.ToString("yyyy-MM-dd"),
+            plan.Day,
+            plan.MealSlot,
+            plan.RecipeId
+        });
     }
 
     // DELETE api/mealplans/{id}
@@ -131,8 +192,13 @@ public class MealPlanController : ControllerBase
     public async Task<IActionResult> Delete(int id)
     {
         var plan = await _db.MealPlans.FindAsync(id);
+
         if (plan == null)
-            return NotFound(new { message = "Meal plan entry not found." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status404NotFound,
+                "Meal plan entry not found.");
+        }
 
         _db.MealPlans.Remove(plan);
         await _db.SaveChangesAsync();
@@ -144,6 +210,13 @@ public class MealPlanController : ControllerBase
     [HttpGet("{userId:int}/grocery-list")]
     public async Task<IActionResult> GetGroceryList(int userId, [FromQuery] string? weekStart = null)
     {
+        if (userId <= 0)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "User ID must be valid.");
+        }
+
         var week = WeekDateHelper.ParseOrCurrent(weekStart);
 
         var plannedRecipes = await _db.MealPlans
@@ -159,7 +232,11 @@ public class MealPlanController : ControllerBase
             foreach (var raw in recipe.Ingredients.Split(','))
             {
                 var text = raw.Trim();
-                if (text.Length == 0) continue;
+
+                if (text.Length == 0)
+                {
+                    continue;
+                }
 
                 var (name, quantity, unit) = ParseIngredient(text);
                 var key = $"{name.ToLowerInvariant()}|{unit.ToLowerInvariant()}";
@@ -206,23 +283,43 @@ public class MealPlanController : ControllerBase
     [HttpPost("{userId:int}/auto-generate")]
     public async Task<IActionResult> AutoGenerate(int userId, [FromQuery] string? weekStart = null)
     {
+        if (userId <= 0)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "User ID must be valid.");
+        }
+
         var week = WeekDateHelper.ParseOrCurrent(weekStart);
 
-        var recipes = await _db.Recipes.Where(r => r.UserId == userId).ToListAsync();
-        if (recipes.Count == 0)
-            return BadRequest(new { message = "You have no saved recipes to plan with." });
+        var recipes = await _db.Recipes
+            .Where(r => r.UserId == userId)
+            .ToListAsync();
 
-        var prefs = await _db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
+        if (recipes.Count == 0)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "You have no saved recipes to plan with.");
+        }
+
+        var prefs = await _db.UserPreferences
+            .FirstOrDefaultAsync(p => p.UserId == userId);
 
         var suggestions = await _suggester.SuggestWeekAsync(recipes, prefs);
         var weekPlan = AutoPlanBuilder.BuildWeek(recipes, prefs, suggestions);
 
         if (weekPlan.Count == 0)
-            return BadRequest(new { message = "None of your recipes match your dietary preferences and allergies." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "None of your recipes match your dietary preferences and allergies.");
+        }
 
         var existing = await _db.MealPlans
             .Where(m => m.UserId == userId && m.WeekStartDate == week)
             .ToListAsync();
+
         _db.MealPlans.RemoveRange(existing);
 
         foreach (var entry in weekPlan)
@@ -249,10 +346,24 @@ public class MealPlanController : ControllerBase
 
     // POST api/mealplans/{userId}/apply-plan?weekStart=2026-07-07
     [HttpPost("{userId:int}/apply-plan")]
-    public async Task<IActionResult> ApplyPlan(int userId, [FromBody] List<PlanEntryDTO> entries, [FromQuery] string? weekStart = null)
+    public async Task<IActionResult> ApplyPlan(
+        int userId,
+        [FromBody] List<PlanEntryDTO> entries,
+        [FromQuery] string? weekStart = null)
     {
+        if (userId <= 0)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "User ID must be valid.");
+        }
+
         if (entries == null || entries.Count == 0)
-            return BadRequest(new { message = "No plan entries provided." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "No plan entries provided.");
+        }
 
         var week = WeekDateHelper.ParseOrCurrent(weekStart);
 
@@ -262,16 +373,38 @@ public class MealPlanController : ControllerBase
             .ToListAsync())
             .ToHashSet();
 
+        if (userRecipeIds.Count == 0)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "You have no saved recipes to save into a meal plan.");
+        }
+
         var seen = new HashSet<(string Day, string Slot)>();
         var toSave = new List<MealPlan>();
 
         foreach (var entry in entries)
         {
-            var day = ValidDays.FirstOrDefault(d => d.Equals(entry.Day, StringComparison.OrdinalIgnoreCase));
-            var slot = ValidSlots.FirstOrDefault(s => s.Equals(entry.MealSlot, StringComparison.OrdinalIgnoreCase));
-            if (day == null || slot == null) continue;
-            if (!userRecipeIds.Contains(entry.RecipeId)) continue;
-            if (!seen.Add((day, slot))) continue;
+            var day = ValidDays.FirstOrDefault(d =>
+                d.Equals(entry.Day, StringComparison.OrdinalIgnoreCase));
+
+            var slot = ValidSlots.FirstOrDefault(s =>
+                s.Equals(entry.MealSlot, StringComparison.OrdinalIgnoreCase));
+
+            if (day == null || slot == null)
+            {
+                continue;
+            }
+
+            if (!userRecipeIds.Contains(entry.RecipeId))
+            {
+                continue;
+            }
+
+            if (!seen.Add((day, slot)))
+            {
+                continue;
+            }
 
             toSave.Add(new MealPlan
             {
@@ -284,11 +417,16 @@ public class MealPlanController : ControllerBase
         }
 
         if (toSave.Count == 0)
-            return BadRequest(new { message = "None of the plan entries were valid for this user." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "None of the plan entries were valid for this user.");
+        }
 
         var existing = await _db.MealPlans
             .Where(m => m.UserId == userId && m.WeekStartDate == week)
             .ToListAsync();
+
         _db.MealPlans.RemoveRange(existing);
         _db.MealPlans.AddRange(toSave);
 
@@ -302,19 +440,44 @@ public class MealPlanController : ControllerBase
         });
     }
 
-    private async Task<IActionResult?> ValidateRequest(MealPlanRequestDTO request, DateOnly week)
+    private async Task<IActionResult?> ValidateRequest(MealPlanRequestDTO request)
     {
         if (!ValidDays.Contains(request.Day))
-            return BadRequest(new { message = "Day must be a valid weekday name (Monday–Sunday)." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "Day must be a valid weekday name from Monday to Sunday.");
+        }
 
         if (!ValidSlots.Contains(request.MealSlot))
-            return BadRequest(new { message = "Meal slot must be breakfast, lunch or dinner." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "Meal slot must be breakfast, lunch, or dinner.");
+        }
 
-        var recipeExists = await _db.Recipes.AnyAsync(r => r.Id == request.RecipeId && r.UserId == request.UserId);
+        var recipeExists = await _db.Recipes.AnyAsync(r =>
+            r.Id == request.RecipeId &&
+            r.UserId == request.UserId);
+
         if (!recipeExists)
-            return BadRequest(new { message = "Recipe not found for this user." });
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "Recipe not found for this user.");
+        }
 
         return null;
+    }
+
+    private ObjectResult ErrorResponse(int statusCode, string message)
+    {
+        return StatusCode(statusCode, new ApiErrorResponse
+        {
+            StatusCode = statusCode,
+            Message = message,
+            TraceId = HttpContext.TraceIdentifier
+        });
     }
 
     private static readonly Regex QuantityPattern = new(
@@ -324,11 +487,16 @@ public class MealPlanController : ControllerBase
     private static (string Name, double Quantity, string Unit) ParseIngredient(string text)
     {
         var match = QuantityPattern.Match(text);
+
         if (match.Success)
         {
             var name = match.Groups["name"].Value.Trim();
-            var qty = double.Parse(match.Groups["qty"].Value, System.Globalization.CultureInfo.InvariantCulture);
+            var qty = double.Parse(
+                match.Groups["qty"].Value,
+                System.Globalization.CultureInfo.InvariantCulture);
+
             var unit = match.Groups["unit"].Value.Trim().ToLowerInvariant();
+
             return (name, qty, unit);
         }
 
