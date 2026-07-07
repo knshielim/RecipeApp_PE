@@ -90,8 +90,8 @@ function App() {
             />
             <Route path="/meal-planner" element={<MealPlanner />} />
             <Route path="/pantry" element={<PantryPage />} />
-            <Route path="/recipes" element={<RecipesPage />} />
-            <Route path="/recipes/:id" element={<RecipeDetail />} />
+            <Route path="/recipes" element={<RecipesPage username={auth.username} />} />
+            <Route path="/recipes/:id" element={<RecipeDetail username={auth.username} />} />
             <Route path="/profile" element={<Profile token={auth.token} username={auth.username} />} />
             <Route path="/ai-assistant" element={<AIAssistantChat token={auth.token} />} />
             <Route path="*" element={<Navigate to="/" replace />} />

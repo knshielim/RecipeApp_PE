@@ -5,6 +5,9 @@ import {
   createRecipe,
   updateRecipe,
   deleteRecipe,
+  getFavoriteRecipes,
+  addFavoriteRecipe,
+  removeFavoriteRecipe,
 } from "../api/recipes";
 
 const emptyForm = {
@@ -16,7 +19,7 @@ const emptyForm = {
   imageUrl: "",
 };
 
-function RecipesPage() {
+function RecipesPage({ username }) {
   const navigate = useNavigate();
 
   const [recipes, setRecipes] = useState([]);
@@ -25,23 +28,58 @@ function RecipesPage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [error, setError] = useState("");
+  const [favoriteIds, setFavoriteIds] = useState(new Set());
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   async function loadRecipes() {
     try {
-      const data = await getRecipes(search, category);
+      let data = [];
+
+      if (showFavoritesOnly && username) {
+        data = await getFavoriteRecipes(username);
+      } else {
+        data = await getRecipes(search, category);
+      }
+
       setRecipes(data);
+
+      if (username) {
+        const favorites = await getFavoriteRecipes(username);
+        setFavoriteIds(new Set(favorites.map((recipe) => recipe.id)));
+      }
     } catch (err) {
       console.error(err);
       setError("Failed to load recipes.");
     }
   }
 
+  async function toggleFavorite(recipeId) {
+    if (!username) {
+      setError("You must be logged in to favorite recipes.");
+      return;
+    }
+
+    try {
+      if (favoriteIds.has(recipeId)) {
+        await removeFavoriteRecipe(recipeId, username);
+      } else {
+        await addFavoriteRecipe(recipeId, username);
+      }
+
+      await loadRecipes();
+    } catch (err) {
+      console.error(err);
+      setError("Failed to update favorite.");
+    }
+  }
+
   useEffect(() => {
     loadRecipes();
-  }, []);
+  }, [showFavoritesOnly]);
 
   function handleChange(e) {
     const { name, value } = e.target;
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -66,6 +104,7 @@ function RecipesPage() {
     setError("");
 
     const validationError = validateForm();
+
     if (validationError) {
       setError(validationError);
       return;
@@ -81,7 +120,11 @@ function RecipesPage() {
           imageUrl: form.imageUrl,
         });
       } else {
-        await createRecipe(form);
+        await createRecipe({
+          ...form,
+          ownerUsername: username || "",
+          writerUsername: username || "",
+        });
       }
 
       setForm(emptyForm);
@@ -95,6 +138,7 @@ function RecipesPage() {
 
   function startEdit(recipe) {
     setEditingId(recipe.id);
+
     setForm({
       userId: recipe.userId,
       title: recipe.title,
@@ -103,11 +147,13 @@ function RecipesPage() {
       category: recipe.category,
       imageUrl: recipe.imageUrl || "",
     });
+
     setError("");
   }
 
   async function handleDelete(id) {
     const confirmed = window.confirm("Delete this recipe?");
+
     if (!confirmed) return;
 
     try {
@@ -157,6 +203,14 @@ function RecipesPage() {
         </select>
 
         <button type="submit">Search</button>
+
+        <button
+          type="button"
+          onClick={() => setShowFavoritesOnly((prev) => !prev)}
+          style={{ marginLeft: "8px" }}
+        >
+          {showFavoritesOnly ? "Show All Recipes" : "Show Favorites"}
+        </button>
       </form>
 
       <form onSubmit={handleSubmit} style={{ marginBottom: "24px" }}>
@@ -214,13 +268,17 @@ function RecipesPage() {
         </button>
 
         {editingId && (
-          <button type="button" onClick={cancelEdit} style={{ marginLeft: "8px" }}>
+          <button
+            type="button"
+            onClick={cancelEdit}
+            style={{ marginLeft: "8px" }}
+          >
             Cancel
           </button>
         )}
       </form>
 
-      <h2>Recipe List</h2>
+      <h2>{showFavoritesOnly ? "Favorite Recipes" : "Recipe List"}</h2>
 
       {recipes.length === 0 ? (
         <p>No recipes found.</p>
@@ -236,15 +294,30 @@ function RecipesPage() {
               }}
             >
               <h3>{recipe.title}</h3>
+
               <p>
                 <strong>Category:</strong> {recipe.category}
               </p>
+
               <p>
                 <strong>Ingredients:</strong> {recipe.ingredients}
               </p>
+
               <p>
                 <strong>Steps:</strong> {recipe.steps || "No steps provided."}
               </p>
+
+              {recipe.ownerUsername && (
+                <p>
+                  <strong>Owner:</strong> {recipe.ownerUsername}
+                </p>
+              )}
+
+              {recipe.writerUsername && (
+                <p>
+                  <strong>Writer:</strong> {recipe.writerUsername}
+                </p>
+              )}
 
               {recipe.imageUrl && (
                 <img
@@ -260,15 +333,27 @@ function RecipesPage() {
               )}
 
               <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
-                <button onClick={() => navigate(`/recipes/${recipe.id}`)}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/recipes/${recipe.id}`)}
+                >
                   View Details
                 </button>
 
-                <button onClick={() => startEdit(recipe)}>
+                <button
+                  type="button"
+                  onClick={() => toggleFavorite(recipe.id)}
+                >
+                  {favoriteIds.has(recipe.id)
+                    ? "★ Favorited"
+                    : "☆ Add to Favorite"}
+                </button>
+
+                <button type="button" onClick={() => startEdit(recipe)}>
                   Edit
                 </button>
 
-                <button onClick={() => handleDelete(recipe.id)}>
+                <button type="button" onClick={() => handleDelete(recipe.id)}>
                   Delete
                 </button>
               </div>

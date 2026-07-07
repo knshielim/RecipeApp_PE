@@ -44,11 +44,13 @@ public class RecipeController : ControllerBase
             {
                 Id = r.Id,
                 UserId = r.UserId,
+                OwnerUsername = r.OwnerUsername,
+                WriterUsername = r.WriterUsername,
                 Title = r.Title,
                 Ingredients = r.Ingredients,
                 Steps = r.Steps,
                 Category = r.Category,
-                ImageUrl = r.ImageUrl
+                ImageUrl = r.ImageUrl,
             })
             .ToListAsync();
 
@@ -70,11 +72,13 @@ public class RecipeController : ControllerBase
         {
             Id = recipe.Id,
             UserId = recipe.UserId,
+            OwnerUsername = recipe.OwnerUsername,
+            WriterUsername = recipe.WriterUsername,
             Title = recipe.Title,
             Ingredients = recipe.Ingredients,
             Steps = recipe.Steps,
             Category = recipe.Category,
-            ImageUrl = recipe.ImageUrl
+            ImageUrl = recipe.ImageUrl,
         });
     }
 
@@ -85,11 +89,13 @@ public class RecipeController : ControllerBase
         var recipe = new Recipe
         {
             UserId = dto.UserId,
+            OwnerUsername = dto.OwnerUsername,
+            WriterUsername = dto.WriterUsername,
             Title = dto.Title,
             Ingredients = dto.Ingredients,
             Steps = dto.Steps,
             Category = dto.Category,
-            ImageUrl = dto.ImageUrl
+            ImageUrl = dto.ImageUrl,
         };
 
         _context.Recipes.Add(recipe);
@@ -143,6 +149,92 @@ public class RecipeController : ControllerBase
         }
 
         _context.Recipes.Remove(recipe);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
+    }
+
+    [HttpGet("favorites")]
+    public async Task<ActionResult<IEnumerable<RecipeDTO>>> GetFavoriteRecipes([FromQuery] string username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return BadRequest(new { message = "Username is required." });
+        }
+
+        var recipes = await _context.FavoriteRecipes
+            .Where(f => f.Username == username)
+            .Include(f => f.Recipe)
+            .Select(f => new RecipeDTO
+            {
+                Id = f.Recipe.Id,
+                UserId = f.Recipe.UserId,
+                OwnerUsername = f.Recipe.OwnerUsername,
+                WriterUsername = f.Recipe.WriterUsername,
+                Title = f.Recipe.Title,
+                Ingredients = f.Recipe.Ingredients,
+                Steps = f.Recipe.Steps,
+                Category = f.Recipe.Category,
+                ImageUrl = f.Recipe.ImageUrl,
+                IsFavorite = true
+            })
+            .ToListAsync();
+
+        return Ok(recipes);
+    }
+
+    [HttpPost("{id}/favorite")]
+    public async Task<IActionResult> AddFavorite(int id, [FromQuery] string username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return BadRequest(new { message = "Username is required." });
+        }
+
+        var recipeExists = await _context.Recipes.AnyAsync(r => r.Id == id);
+
+        if (!recipeExists)
+        {
+            return NotFound(new { message = "Recipe not found." });
+        }
+
+        var alreadyFavorite = await _context.FavoriteRecipes
+            .AnyAsync(f => f.RecipeId == id && f.Username == username);
+
+        if (alreadyFavorite)
+        {
+            return Ok(new { message = "Recipe already in favorites." });
+        }
+
+        var favorite = new FavoriteRecipe
+        {
+            RecipeId = id,
+            Username = username
+        };
+
+        _context.FavoriteRecipes.Add(favorite);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Recipe added to favorites." });
+    }
+
+    [HttpDelete("{id}/favorite")]
+    public async Task<IActionResult> RemoveFavorite(int id, [FromQuery] string username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return BadRequest(new { message = "Username is required." });
+        }
+
+        var favorite = await _context.FavoriteRecipes
+            .FirstOrDefaultAsync(f => f.RecipeId == id && f.Username == username);
+
+        if (favorite == null)
+        {
+            return NotFound(new { message = "Favorite recipe not found." });
+        }
+
+        _context.FavoriteRecipes.Remove(favorite);
         await _context.SaveChangesAsync();
 
         return NoContent();
