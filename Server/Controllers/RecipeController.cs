@@ -35,7 +35,12 @@ public class RecipeController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(category))
         {
-            query = query.Where(r => r.Category == category);
+            // Match either the legacy single Category field OR any of the
+            // recipe's assigned categories, so a recipe tagged with multiple
+            // categories (e.g. Tacos + Bowls) shows up under both tiles.
+            query = query.Where(r =>
+                r.Category == category ||
+                r.CategoryAssignments.Any(ca => ca.RecipeCategory.Name == category));
         }
 
         var recipes = await query

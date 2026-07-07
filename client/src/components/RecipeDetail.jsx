@@ -130,32 +130,50 @@ function RecipeDetail({ username, isAdmin = false }) {
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
             <h1 className="text-2xl sm:text-3xl font-bold">{recipe.title}</h1>
-            <p className="text-sm text-white/90 mt-2">
-              {recipe.category && (
+            {(() => {
+              // Prefer the full multi-category list; fall back to the
+              // legacy single `category` field for older recipes that
+              // haven't been re-saved with the new category picker.
+              const categoryNames = recipe.categories?.length
+                ? recipe.categories.map((c) => c.name)
+                : recipe.category
+                ? [recipe.category]
+                : [];
+
+              return (
                 <>
-                  <span className="font-bold">Category:</span>{" "}
-                  <span className="font-bold">{recipe.category}</span>
+                  {categoryNames.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2 mb-2">
+                      {categoryNames.map((name) => (
+                        <span
+                          key={name}
+                          className="px-3 py-1 rounded-full text-xs font-bold bg-white/20 backdrop-blur-sm"
+                        >
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-sm text-white/90">
+                    {dietLabel && (
+                      <>
+                        <span className="font-bold">Diet:</span>{" "}
+                        <span className="font-bold">{dietLabel}</span>
+                      </>
+                    )}
+                    {dietLabel && recipe.ownerName && (
+                      <span className="mx-1.5">·</span>
+                    )}
+                    {recipe.ownerName && (
+                      <>
+                        <span className="font-bold">Owner:</span>{" "}
+                        <span className="font-bold">{recipe.ownerName}</span>
+                      </>
+                    )}
+                  </p>
                 </>
-              )}
-              {recipe.category && dietLabel && (
-                <span className="mx-1.5">·</span>
-              )}
-              {dietLabel && (
-                <>
-                  <span className="font-bold">Diet:</span>{" "}
-                  <span className="font-bold">{dietLabel}</span>
-                </>
-              )}
-              {(recipe.category || dietLabel) && recipe.ownerName && (
-                <span className="mx-1.5">·</span>
-              )}
-              {recipe.ownerName && (
-                <>
-                  <span className="font-bold">Owner:</span>{" "}
-                  <span className="font-bold">{recipe.ownerName}</span>
-                </>
-              )}
-            </p>
+              );
+            })()}
           </div>
         </div>
 

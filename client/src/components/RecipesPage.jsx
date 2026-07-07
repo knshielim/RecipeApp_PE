@@ -21,7 +21,6 @@ const emptyForm = {
   title: "",
   ingredients: "",
   steps: "",
-  category: "",
   categoryIds: [],
   dietRestriction: "none",
   allergens: "",
@@ -33,7 +32,8 @@ const FALLBACK_CATEGORIES = ["Asian", "Bowls", "Breakfast", "Comfort Food", "Cur
 function RecipesPage({ username, isAdmin = false }) {
   const { displayName } = useUserProfile();
   const [recipes, setRecipes] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState([]); // names only, used by the "Top Recipe Categories" strip
+  const [categoryList, setCategoryList] = useState([]); // full {id, name, emoji, colorKey} objects, used by the form
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
@@ -74,11 +74,15 @@ function RecipesPage({ username, isAdmin = false }) {
       const res = await fetch(`${API}/api/dashboard/categories`);
       if (res.ok) {
         const data = await res.json();
+        setCategoryList(data);
         setCategories(data.map((c) => c.name).filter(Boolean).sort());
+        return;
       }
     } catch {
-      setCategories(FALLBACK_CATEGORIES.sort());
+      // fall through to fallback below
     }
+    setCategories([...FALLBACK_CATEGORIES].sort());
+    setCategoryList(FALLBACK_CATEGORIES.map((name, i) => ({ id: i, name, emoji: "", colorKey: "" })));
   }
 
   useEffect(() => {
@@ -113,11 +117,23 @@ function RecipesPage({ username, isAdmin = false }) {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
+  function toggleCategoryId(id) {
+    setForm((prev) => {
+      const has = prev.categoryIds.includes(id);
+      return {
+        ...prev,
+        categoryIds: has
+          ? prev.categoryIds.filter((cid) => cid !== id)
+          : [...prev.categoryIds, id],
+      };
+    });
+  }
+
   function validateForm() {
     if (!form.title.trim()) return "Title is required.";
     if (!form.ingredients.trim()) return "Ingredients are required.";
     if (!form.steps.trim()) return "Steps are required.";
-    if (!form.category.trim()) return "Category is required.";
+    if (!form.categoryIds || form.categoryIds.length === 0) return "Select at least one category.";
     if (form.imageUrl.trim() && !form.imageUrl.startsWith("http")) {
       return "Image URL must start with http or https.";
     }
@@ -138,7 +154,7 @@ function RecipesPage({ username, isAdmin = false }) {
       title: recipe.title,
       ingredients: recipe.ingredients,
       steps: recipe.steps || "",
-      category: recipe.category,
+      categoryIds: recipe.categories?.map((c) => c.id) || [],
       dietRestriction: recipe.dietRestriction || "none",
       allergens: recipe.allergens || "",
       imageUrl: recipe.imageUrl || "",
@@ -164,13 +180,19 @@ function RecipesPage({ username, isAdmin = false }) {
       return;
     }
 
+    // "category" (singular, string) is kept for backward compatibility with
+    // older parts of the app; it's derived from the first selected category.
+    const primaryCategoryName =
+      categoryList.find((c) => c.id === form.categoryIds[0])?.name || "";
+
     try {
       if (editingId) {
         await updateRecipe(editingId, {
           title: form.title,
           ingredients: form.ingredients,
           steps: form.steps,
-          category: form.category,
+          category: primaryCategoryName,
+          categoryIds: form.categoryIds,
           dietRestriction: form.dietRestriction,
           allergens: form.allergens,
           imageUrl: form.imageUrl,
@@ -178,6 +200,7 @@ function RecipesPage({ username, isAdmin = false }) {
       } else {
         await createRecipe({
           ...form,
+          category: primaryCategoryName,
           ownerName: displayName || username || "",
         });
       }
@@ -516,21 +539,29 @@ function RecipesPage({ username, isAdmin = false }) {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Category *</label>
-                <select
-                  name="category"
-                  value={form.category}
-                  onChange={handleChange}
-                  className="input-field w-full"
-                  required
-                >
-                  <option value="">Select a category</option>
-                  {categoryOptions.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Categories * <span className="font-normal text-slate-400">(select one or more)</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {categoryList.map((cat) => {
+                    const selected = form.categoryIds.includes(cat.id);
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => toggleCategoryId(cat.id)}
+                        aria-pressed={selected}
+                        className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-colors ${
+                          selected
+                            ? "bg-brand text-white border-brand"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-brand/40 hover:text-brand"
+                        }`}
+                      >
+                        {cat.emoji ? `${cat.emoji} ` : ""}{cat.name}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div>
