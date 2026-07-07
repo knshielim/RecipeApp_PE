@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { API_BASE, formatFetchError } from "../utils/apiError";
+import { API_BASE, parseApiResponse, formatFetchError } from "../utils/apiError";
 
 const API = API_BASE;
 
@@ -27,24 +27,26 @@ function RegistrationPage({ onGoToLogin }) {
     }
 
     setLoading(true);
+
     try {
       const res = await fetch(`${API}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName,
-          email,
-          username,
+          fullName: fullName.trim(),
+          email: email.trim(),
+          username: username.trim(),
           password,
           role: "User",
-          phoneNumber,
+          phoneNumber: phoneNumber.trim(),
           dateOfBirth,
           gender,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? "Registration failed.");
-      setSuccess(data.message);
+
+      const data = await parseApiResponse(res, "Registration failed.");
+
+      setSuccess(data.message || "Account created successfully.");
       setFullName("");
       setEmail("");
       setUsername("");
@@ -186,6 +188,7 @@ function RegistrationPage({ onGoToLogin }) {
             />
             <p className="text-xs text-slate-400 mt-1">At least 6 characters.</p>
           </div>
+
           <div>
             <label htmlFor="reg-confirm" className="block text-sm font-medium text-slate-700 mb-1.5">
               Confirm password
@@ -203,10 +206,11 @@ function RegistrationPage({ onGoToLogin }) {
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3.5 py-2.5">
+            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3.5 py-2.5 whitespace-pre-line">
               {error}
             </p>
           )}
+
           {success && (
             <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3.5 py-2.5">
               {success}

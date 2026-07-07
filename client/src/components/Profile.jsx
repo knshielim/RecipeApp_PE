@@ -8,8 +8,9 @@ import { matchesSearch, isSearchActive } from '../utils/search';
 import RecipeCard from './RecipeCard';
 import UserAvatar from './UserAvatar';
 import { resizeImageFile } from '../utils/profilePicture';
+import { API_BASE, parseApiResponse, formatFetchError } from '../utils/apiError';
 
-const API = 'http://localhost:5237';
+const API = API_BASE;
 const USER_ID = 1;
 
 export default function Profile({ token, username }) {
@@ -52,8 +53,9 @@ export default function Profile({ token, username }) {
       const res = await fetch(`${API}/api/auth/profile`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error('Could not load account information.');
-      const data = await res.json();
+
+      const data = await parseApiResponse(res, 'Could not load account information.');
+
       setAccount(data);
       setAccountForm({
         fullName: data.fullName || '',
@@ -63,7 +65,7 @@ export default function Profile({ token, username }) {
         gender: data.gender || '',
       });
     } catch (error) {
-      setAccountStatus({ type: 'error', msg: error.message });
+      setAccountStatus({ type: 'error', msg: formatFetchError(error) });
     }
   };
 
@@ -75,16 +77,19 @@ export default function Profile({ token, username }) {
 
   const handleAccountSave = async (e) => {
     e.preventDefault();
+
     if (!accountForm.fullName.trim()) {
       setAccountStatus({ type: 'error', msg: 'Full name is required.' });
       return;
     }
+
     if (!accountForm.email.trim() || !accountForm.email.includes('@')) {
       setAccountStatus({ type: 'error', msg: 'A valid email is required.' });
       return;
     }
 
     setSavingAccount(true);
+
     try {
       const res = await fetch(`${API}/api/auth/profile`, {
         method: 'PUT',
@@ -92,16 +97,22 @@ export default function Profile({ token, username }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(accountForm),
+        body: JSON.stringify({
+          fullName: accountForm.fullName.trim(),
+          email: accountForm.email.trim(),
+          phoneNumber: accountForm.phoneNumber.trim(),
+          dateOfBirth: accountForm.dateOfBirth,
+          gender: accountForm.gender,
+        }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || 'Failed to update profile.');
+
+      const data = await parseApiResponse(res, 'Failed to update profile.');
 
       setAccountStatus({ type: 'success', msg: data.message || 'Profile updated.' });
       setEditingAccount(false);
       fetchAccount();
     } catch (error) {
-      setAccountStatus({ type: 'error', msg: error.message });
+      setAccountStatus({ type: 'error', msg: formatFetchError(error) });
     } finally {
       setSavingAccount(false);
     }
@@ -266,13 +277,12 @@ export default function Profile({ token, username }) {
               </Link>
             </div>
             {pictureStatus.msg && (
-              <p className={`text-sm mt-2 ${
-                pictureStatus.type === 'success'
-                  ? 'text-brand'
-                  : pictureStatus.type === 'warning'
-                    ? 'text-amber-700'
-                    : 'text-red-600'
-              }`}>
+              <p className={`text-sm mt-2 ${pictureStatus.type === 'success'
+                ? 'text-brand'
+                : pictureStatus.type === 'warning'
+                  ? 'text-amber-700'
+                  : 'text-red-600'
+                }`}>
                 {pictureStatus.msg}
               </p>
             )}
@@ -427,9 +437,8 @@ export default function Profile({ token, username }) {
                 <div className="space-y-4">
                   {recentActivity.map((activity, idx) => (
                     <div key={idx} className="flex items-start gap-3 pb-4 border-b border-slate-100 last:border-0 last:pb-0">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        activity.type === 'Recipe' ? 'bg-blue-100' : 'bg-purple-100'
-                      }`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${activity.type === 'Recipe' ? 'bg-blue-100' : 'bg-purple-100'
+                        }`}>
                         {activity.type === 'Recipe' ? (
                           <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -475,11 +484,10 @@ export default function Profile({ token, username }) {
             </div>
 
             {accountStatus.msg && (
-              <p className={`text-sm font-medium p-3 rounded-lg mb-5 ${
-                accountStatus.type === 'success'
-                  ? 'text-emerald-700 bg-emerald-50 border border-emerald-100'
-                  : 'text-red-600 bg-red-50 border border-red-100'
-              }`}>
+              <p className={`text-sm font-medium p-3 rounded-lg mb-5 whitespace-pre-line ${accountStatus.type === 'success'
+                ? 'text-emerald-700 bg-emerald-50 border border-emerald-100'
+                : 'text-red-600 bg-red-50 border border-red-100'
+                }`}>
                 {accountStatus.msg}
               </p>
             )}

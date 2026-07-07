@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { CATEGORY_COLOR_OPTIONS, getCategoryGradient } from "../utils/recipeCategoryColors";
+import { API_BASE, getApiErrorMessage, formatFetchError } from "../utils/apiError";
 
-const API = "http://localhost:5237";
+const API = API_BASE;
 
 // Some responses (e.g. 401 from expired tokens) have an empty body —
 // parse safely instead of crashing with "Unexpected end of JSON input".
@@ -12,6 +13,24 @@ async function safeJson(res) {
   } catch {
     return {};
   }
+}
+
+async function readAdminResponse(res, fallback = "Request failed.") {
+  const data = await safeJson(res);
+
+  if (res.status === 401) {
+    throw new Error("Session expired. Please log out and sign in again.");
+  }
+
+  if (res.status === 403) {
+    throw new Error("Admin access required.");
+  }
+
+  if (!res.ok) {
+    throw new Error(getApiErrorMessage(data, fallback));
+  }
+
+  return data;
 }
 
 function TopBar({ username, role, onLogout, onUserDashboard }) {
@@ -122,12 +141,11 @@ function AdminPage({ token, username, onLogout }) {
       const res = await fetch(`${API}/api/admin/users`, {
         headers: authHeaders(),
       });
-      if (res.status === 401) throw new Error("Session expired. Please log out and sign in again.");
-      if (res.status === 403) throw new Error("Admin access required.");
-      if (!res.ok) throw new Error("Could not load users.");
-      setUsers(await res.json());
+
+      const data = await readAdminResponse(res, "Could not load users.");
+      setUsers(data);
     } catch (err) {
-      setError(err.message);
+      setError(formatFetchError(err));
     }
   }, [authHeaders]);
 
@@ -136,12 +154,11 @@ function AdminPage({ token, username, onLogout }) {
       const res = await fetch(`${API}/api/admin/categories`, {
         headers: authHeaders(),
       });
-      if (res.status === 401) throw new Error("Session expired. Please log out and sign in again.");
-      if (res.status === 403) throw new Error("Admin access required.");
-      if (!res.ok) throw new Error("Could not load categories.");
-      setCategories(await res.json());
+
+      const data = await readAdminResponse(res, "Could not load categories.");
+      setCategories(data);
     } catch (err) {
-      setError(err.message);
+      setError(formatFetchError(err));
     }
   }, [authHeaders]);
 
@@ -150,14 +167,14 @@ function AdminPage({ token, username, onLogout }) {
       const res = await fetch(`${API}/api/admin/recipes`, {
         headers: authHeaders(),
       });
-      if (res.status === 401) throw new Error("Session expired. Please log out and sign in again.");
-      if (res.status === 403) throw new Error("Admin access required.");
-      if (!res.ok) throw new Error("Could not load recipes.");
-      setRecipes(await res.json());
+
+      const data = await readAdminResponse(res, "Could not load recipes.");
+      setRecipes(data);
     } catch (err) {
-      setError(err.message);
+      setError(formatFetchError(err));
     }
   }, [authHeaders]);
+
 
   useEffect(() => {
     loadUsers();
@@ -168,16 +185,18 @@ function AdminPage({ token, username, onLogout }) {
   async function handleAction(promise, refresh) {
     setError("");
     setNotice("");
+
     try {
       const res = await promise;
-      if (res.status === 401)
-        throw new Error("Session expired. Please log out and sign in again.");
-      const data = await safeJson(res);
-      if (!res.ok) throw new Error(data.message ?? "Action failed.");
-      setNotice(data.message ?? "Done.");
-      refresh();
+      const data = await readAdminResponse(res, "Action failed.");
+
+      setNotice(data.message || "Done.");
+
+      if (refresh) {
+        await refresh();
+      }
     } catch (err) {
-      setError(err.message);
+      setError(formatFetchError(err));
     }
   }
 
@@ -406,10 +425,9 @@ function AdminPage({ token, username, onLogout }) {
   }
 
   const tabClass = (active) =>
-    `px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
-      active
-        ? "bg-green-600 text-white"
-        : "bg-white text-slate-500 border border-slate-200 hover:border-slate-300 hover:text-slate-700"
+    `px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${active
+      ? "bg-green-600 text-white"
+      : "bg-white text-slate-500 border border-slate-200 hover:border-slate-300 hover:text-slate-700"
     }`;
 
   const inputClass =
@@ -475,7 +493,7 @@ function AdminPage({ token, username, onLogout }) {
         </div>
 
         {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3">
+          <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3 whitespace-pre-line">
             {error}
           </p>
         )}
@@ -488,102 +506,102 @@ function AdminPage({ token, username, onLogout }) {
         {/* Edit user modal */}
         {editUser && (
           <AdminModal title="Edit user information" onClose={cancelEdit}>
-              <p className="text-sm text-slate-500 mb-5">
-                Editing <span className="font-semibold text-green-600">@{editUser}</span>
-                {" "}— username cannot be changed.
-              </p>
-              <form onSubmit={saveEdit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Name *</label>
-                    <input
-                      type="text"
-                      name="fullName"
-                      value={editForm.fullName}
-                      onChange={handleEditInput}
-                      className={inputClass}
-                      placeholder="e.g., Alice Tan"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email *</label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={editForm.email}
-                      onChange={handleEditInput}
-                      className={inputClass}
-                      placeholder="user@example.com"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phone Number</label>
-                    <input
-                      type="tel"
-                      name="phoneNumber"
-                      value={editForm.phoneNumber}
-                      onChange={handleEditInput}
-                      className={inputClass}
-                      placeholder="08xxxxxxxxxx"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date of Birth</label>
-                    <input
-                      type="date"
-                      name="dateOfBirth"
-                      value={editForm.dateOfBirth}
-                      onChange={handleEditInput}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Gender</label>
-                    <select
-                      name="gender"
-                      value={editForm.gender}
-                      onChange={handleEditInput}
-                      className={`${inputClass} bg-white`}
-                    >
-                      <option value="">Prefer not to say</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Reset Password</label>
-                    <input
-                      type="password"
-                      name="newPassword"
-                      value={editForm.newPassword}
-                      onChange={handleEditInput}
-                      className={inputClass}
-                      autoComplete="new-password"
-                      placeholder="Leave blank to keep current"
-                    />
-                    <p className="text-xs text-slate-400 mt-1">Optional — at least 6 characters if set.</p>
-                  </div>
+            <p className="text-sm text-slate-500 mb-5">
+              Editing <span className="font-semibold text-green-600">@{editUser}</span>
+              {" "}— username cannot be changed.
+            </p>
+            <form onSubmit={saveEdit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Name *</label>
+                  <input
+                    type="text"
+                    name="fullName"
+                    value={editForm.fullName}
+                    onChange={handleEditInput}
+                    className={inputClass}
+                    placeholder="e.g., Alice Tan"
+                    required
+                  />
                 </div>
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="submit"
-                    disabled={savingEdit}
-                    className="bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm shadow-sm disabled:opacity-50 flex-1"
-                  >
-                    {savingEdit ? "Saving..." : "Save Changes"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={cancelEdit}
-                    className="bg-slate-100 text-slate-700 px-6 py-2.5 rounded-lg hover:bg-slate-200 transition-colors font-semibold text-sm"
-                  >
-                    Cancel
-                  </button>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email *</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={editForm.email}
+                    onChange={handleEditInput}
+                    className={inputClass}
+                    placeholder="user@example.com"
+                    required
+                  />
                 </div>
-              </form>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phone Number</label>
+                  <input
+                    type="tel"
+                    name="phoneNumber"
+                    value={editForm.phoneNumber}
+                    onChange={handleEditInput}
+                    className={inputClass}
+                    placeholder="08xxxxxxxxxx"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date of Birth</label>
+                  <input
+                    type="date"
+                    name="dateOfBirth"
+                    value={editForm.dateOfBirth}
+                    onChange={handleEditInput}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Gender</label>
+                  <select
+                    name="gender"
+                    value={editForm.gender}
+                    onChange={handleEditInput}
+                    className={`${inputClass} bg-white`}
+                  >
+                    <option value="">Prefer not to say</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Reset Password</label>
+                  <input
+                    type="password"
+                    name="newPassword"
+                    value={editForm.newPassword}
+                    onChange={handleEditInput}
+                    className={inputClass}
+                    autoComplete="new-password"
+                    placeholder="Leave blank to keep current"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Optional — at least 6 characters if set.</p>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm shadow-sm disabled:opacity-50 flex-1"
+                >
+                  {savingEdit ? "Saving..." : "Save Changes"}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="bg-slate-100 text-slate-700 px-6 py-2.5 rounded-lg hover:bg-slate-200 transition-colors font-semibold text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </AdminModal>
         )}
 
@@ -605,9 +623,8 @@ function AdminPage({ token, username, onLogout }) {
                 {users.map((u) => (
                   <tr
                     key={u.username}
-                    className={`border-b border-slate-50 last:border-0 ${
-                      editUser === u.username ? "bg-green-50/50" : ""
-                    } ${u.isActive === false ? "opacity-60" : ""}`}
+                    className={`border-b border-slate-50 last:border-0 ${editUser === u.username ? "bg-green-50/50" : ""
+                      } ${u.isActive === false ? "opacity-60" : ""}`}
                   >
                     <td className="px-5 py-3.5">
                       <p className="font-semibold text-slate-900">
@@ -636,11 +653,10 @@ function AdminPage({ token, username, onLogout }) {
                     </td>
                     <td className="px-5 py-3.5">
                       <span
-                        className={`font-mono text-[11px] px-2.5 py-1 rounded-full ${
-                          u.isActive === false
-                            ? "bg-red-50 text-red-600"
-                            : "bg-green-50 text-green-600"
-                        }`}
+                        className={`font-mono text-[11px] px-2.5 py-1 rounded-full ${u.isActive === false
+                          ? "bg-red-50 text-red-600"
+                          : "bg-green-50 text-green-600"
+                          }`}
                       >
                         {u.isActive === false ? "Inactive" : "Active"}
                       </span>
@@ -659,11 +675,10 @@ function AdminPage({ token, username, onLogout }) {
                         <>
                           <button
                             onClick={() => toggleStatus(u.username, u.isActive !== false)}
-                            className={`text-sm font-medium hover:underline ${
-                              u.isActive === false
-                                ? "text-green-600 hover:text-green-700"
-                                : "text-amber-600 hover:text-amber-700"
-                            }`}
+                            className={`text-sm font-medium hover:underline ${u.isActive === false
+                              ? "text-green-600 hover:text-green-700"
+                              : "text-amber-600 hover:text-amber-700"
+                              }`}
                           >
                             {u.isActive === false ? "Activate" : "Deactivate"}
                           </button>

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { API_BASE, getApiErrorMessage, formatFetchError } from "../utils/apiError";
 
-const API = "http://localhost:5237";
+const API = API_BASE;
 
 export default function PantryScanner({ onAdded }) {
   const [file, setFile] = useState(null);
@@ -9,34 +10,62 @@ export default function PantryScanner({ onAdded }) {
   const [parsing, setParsing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (preview) {
+        URL.revokeObjectURL(preview);
+      }
+    };
+  }, [preview]);
 
   function onPick(e) {
-    const f = e.target.files[0];
+    const f = e.target.files?.[0];
+
     if (!f) return;
+
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
+
     setFile(f);
     setPreview(URL.createObjectURL(f));
     setParsedItems([]);
     setDone(false);
+    setError("");
   }
 
   async function parseReceipt() {
     if (!file) return;
+
     setParsing(true);
     setParsedItems([]);
     setDone(false);
+    setError("");
 
     try {
       const form = new FormData();
       form.append("image", file);
+
       const res = await fetch(`${API}/api/receipt/parse`, {
         method: "POST",
         body: form,
       });
-      if (!res.ok) throw new Error("Failed to parse receipt");
-      const items = await res.json();
-      setParsedItems(items.map((it) => ({ ...it, selected: true })));
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(getApiErrorMessage(data, "Failed to parse receipt."));
+      }
+
+      setParsedItems(
+        Array.isArray(data)
+          ? data.map((it) => ({ ...it, selected: true }))
+          : []
+      );
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      setError(formatFetchError(err));
     } finally {
       setParsing(false);
     }
@@ -56,24 +85,41 @@ export default function PantryScanner({ onAdded }) {
 
   async function addToPantry() {
     const selected = parsedItems.filter((it) => it.selected);
+
     if (selected.length === 0) return;
+
     setAdding(true);
+    setError("");
 
     try {
       const res = await fetch(`${API}/api/pantry/bulk-add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(selected.map(({ name, quantity, unit }) => ({ name, quantity, unit }))),
+        body: JSON.stringify(
+          selected.map(({ name, quantity, unit }) => ({
+            name,
+            quantity,
+            unit,
+          }))
+        ),
       });
-      if (!res.ok) throw new Error("Failed to add to pantry");
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(getApiErrorMessage(data, "Failed to add items to pantry."));
+      }
+
       setDone(true);
       onAdded?.();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      setError(formatFetchError(err));
     } finally {
       setAdding(false);
     }
   }
+
+  const selectedCount = parsedItems.filter((i) => i.selected).length;
 
   return (
     <div className="w-full">
@@ -90,6 +136,7 @@ export default function PantryScanner({ onAdded }) {
             </p>
             <p className="text-xs text-slate-400">PNG, JPG, GIF (MAX. 10MB)</p>
           </div>
+
           <input
             type="file"
             accept="image/*"
@@ -107,6 +154,12 @@ export default function PantryScanner({ onAdded }) {
         />
       )}
 
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3 whitespace-pre-line">
+          {error}
+        </p>
+      )}
+
       <button
         onClick={parseReceipt}
         disabled={!file || parsing}
@@ -120,6 +173,7 @@ export default function PantryScanner({ onAdded }) {
           <p className="text-sm text-slate-500 mb-2">
             Select items to add to your pantry:
           </p>
+
           <div className="space-y-2 max-h-60 overflow-y-auto">
             {parsedItems.map((item, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -129,13 +183,16 @@ export default function PantryScanner({ onAdded }) {
                   onChange={() => toggleItem(i)}
                   className="accent-brand"
                 />
+
                 <span className="flex-1 text-sm capitalize">{item.name}</span>
+
                 <input
                   value={item.quantity ?? ""}
                   onChange={(e) => updateField(i, "quantity", e.target.value)}
                   placeholder="qty"
                   className="w-16 border rounded-lg px-2 py-1 text-sm"
                 />
+
                 <input
                   value={item.unit ?? ""}
                   onChange={(e) => updateField(i, "unit", e.target.value)}
@@ -148,11 +205,12 @@ export default function PantryScanner({ onAdded }) {
 
           <button
             onClick={addToPantry}
-            disabled={adding || parsedItems.filter((i) => i.selected).length === 0}
+            disabled={adding || selectedCount === 0}
             className="mt-3 bg-green-600 text-white px-4 py-2 rounded-xl disabled:opacity-50"
           >
-            {adding ? "Adding..." : `Add ${parsedItems.filter((i) => i.selected).length} items to Pantry`}
+            {adding ? "Adding..." : `Add ${selectedCount} items to Pantry`}
           </button>
+
           {done && (
             <span className="ml-3 text-sm text-green-600">Added to pantry ✓</span>
           )}

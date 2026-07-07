@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { API_BASE, formatFetchError } from "../utils/apiError";
-
+import { API_BASE, parseApiResponse, formatFetchError } from "../utils/apiError";
 const API = API_BASE;
 
 const ROLES = [
   {
     id: "User",
     label: "User",
+    desc: "Access recipes, pantry, meal plans, and AI assistant.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
         <circle cx="12" cy="8" r="4" />
@@ -17,6 +17,7 @@ const ROLES = [
   {
     id: "Admin",
     label: "Admin",
+    desc: "Manage users, recipes, and recipe categories.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
         <path d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z" strokeLinejoin="round" />
@@ -37,14 +38,16 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
     e.preventDefault();
     setError("");
     setLoading(true);
+
     try {
       const res = await fetch(`${API}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: username.trim(), password, role }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? "Login failed.");
+
+      const data = await parseApiResponse(res, "Login failed.");
+
       onLoginSuccess(data.token, data.username, data.role);
     } catch (err) {
       setError(formatFetchError(err));
@@ -142,7 +145,7 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
             </div>
 
             {error && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3.5 py-2.5">
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3.5 py-2.5 whitespace-pre-line">
                 {error}
               </p>
             )}

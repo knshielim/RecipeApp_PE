@@ -1,5 +1,6 @@
 namespace Server.DTO;
 
+// no need validation because its not an input
 public class RecipeDTO
 {
     public int Id { get; set; }

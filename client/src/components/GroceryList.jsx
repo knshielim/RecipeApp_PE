@@ -3,6 +3,7 @@ import { getGroceryList } from "../api/mealPlans";
 import { useSearch } from "./layout/AppLayout";
 import { matchesSearch, isSearchActive } from "../utils/search";
 import { formatWeekLabel } from "../utils/weekUtils";
+import { formatFetchError } from "../utils/apiError";
 
 const USER_ID = 1;
 
@@ -29,17 +30,21 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
   async function generateList() {
     setLoading(true);
     setError("");
+
     try {
       const data = await getGroceryList(USER_ID, weekStart);
-      setItems(data.items);
-      setTotalRecipes(data.totalRecipes);
+
+      setItems(data.items || []);
+      setTotalRecipes(data.totalRecipes || 0);
+
       if (data.weekStartDate) {
         const [y, m, d] = data.weekStartDate.split("-").map(Number);
         setWeekLabel(formatWeekLabel(new Date(y, m - 1, d)));
       }
+
       setChecked({});
     } catch (err) {
-      setError(err.message || "Failed to generate grocery list.");
+      setError(formatFetchError(err) || "Failed to generate grocery list.");
     } finally {
       setLoading(false);
     }
@@ -52,6 +57,7 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
   const filteredItems = useMemo(() => {
     if (!items) return [];
     if (!isSearchActive(searchQuery)) return items;
+
     return items.filter((item) => matchesSearch(searchQuery, item.name, item.unit));
   }, [items, searchQuery]);
 
@@ -62,10 +68,12 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
 
   useEffect(() => {
     if (!onSearchResultsChange) return;
+
     if (!isSearching) {
       onSearchResultsChange(true);
       return;
     }
+
     onSearchResultsChange(Boolean(items && filteredItems.length > 0));
   }, [isSearching, items, filteredItems.length, onSearchResultsChange]);
 
@@ -82,6 +90,7 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
             <p className="text-xs text-slate-400 mt-1">Week of {weekLabel}</p>
           )}
         </div>
+
         {!isSearching && (
           <button
             onClick={generateList}
@@ -94,7 +103,7 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
       </div>
 
       {error && (
-        <p className="text-sm font-medium p-3 rounded-xl mb-5 text-red-600 bg-red-50 border border-red-100">
+        <p className="text-sm font-medium p-3 rounded-xl mb-5 text-red-600 bg-red-50 border border-red-100 whitespace-pre-line">
           {error}
         </p>
       )}
@@ -116,7 +125,8 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
           {!isSearching && (
             <p className="text-sm text-slate-500 mb-4">
               Aggregated from {totalRecipes} planned meal{totalRecipes !== 1 ? "s" : ""}.
-              {withUnits.length > 0 && ` ${withUnits.length} item${withUnits.length !== 1 ? "s" : ""} with quantities.`}
+              {withUnits.length > 0 &&
+                ` ${withUnits.length} item${withUnits.length !== 1 ? "s" : ""} with quantities.`}
             </p>
           )}
 
@@ -125,9 +135,11 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
                 Measured items
               </h3>
+
               <ul className="space-y-1">
                 {withUnits.map((item) => {
                   const key = `${item.name}-${item.unit}`;
+
                   return (
                     <li
                       key={key}
@@ -150,9 +162,11 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
                 Pantry staples
               </h3>
+
               <ul className="space-y-1 max-h-48 overflow-y-auto">
                 {withoutUnits.map((item) => {
                   const key = item.name;
+
                   return (
                     <li
                       key={key}

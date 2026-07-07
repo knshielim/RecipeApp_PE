@@ -3,27 +3,36 @@ import PantryScanner from './PantryScanner';
 import PantryObjectDetector from './PantryObjectDetector';
 import { useSearch } from './layout/AppLayout';
 import { matchesSearch, isSearchActive } from '../utils/search';
+import { API_BASE, parseApiResponse, getApiErrorMessage, formatFetchError } from '../utils/apiError';
 
-const API = 'http://localhost:5237';
+const API = API_BASE;
 const USER_ID = 1;
 
 const CATEGORIES = ['Vegetables', 'Proteins', 'Dairy', 'Grains', 'Spices', 'Fruits', 'Oils', 'Other'];
 
 function formatDate(dateString) {
   if (!dateString) return 'N/A';
-  return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  return new Date(dateString).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 function isExpiringSoon(dateString) {
   if (!dateString) return false;
+
   const expiryDate = new Date(dateString);
   const today = new Date();
   const daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+
   return daysUntilExpiry <= 3 && daysUntilExpiry >= 0;
 }
 
 function isExpired(dateString) {
   if (!dateString) return false;
+
   return new Date(dateString) < new Date();
 }
 
@@ -41,6 +50,7 @@ export default function PantryPage() {
   });
   const [editingId, setEditingId] = useState(null);
   const [formError, setFormError] = useState('');
+  const [pageError, setPageError] = useState('');
   const [showPantryModal, setShowPantryModal] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showDetector, setShowDetector] = useState(false);
@@ -50,11 +60,17 @@ export default function PantryPage() {
   }, []);
 
   async function fetchPantryItems() {
+    setLoading(true);
+    setPageError('');
+
     try {
       const res = await fetch(`${API}/api/pantry/${USER_ID}`);
-      setPantryItems(await res.json());
+      const data = await parseApiResponse(res, 'Could not load pantry items.');
+
+      setPantryItems(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('Error fetching pantry:', error);
+      console.error('Error fetching pantry:', formatFetchError(error));
+      setPageError(formatFetchError(error));
       setPantryItems([]);
     } finally {
       setLoading(false);
@@ -63,29 +79,40 @@ export default function PantryPage() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+
     setFormData((prev) => ({ ...prev, [name]: value }));
     setFormError('');
   };
 
   const validateForm = () => {
     if (!formData.ingredientName.trim()) {
-      setFormError('Ingredient name is required');
+      setFormError('Ingredient name is required.');
       return false;
     }
+
     if (!formData.category) {
-      setFormError('Category is required');
+      setFormError('Category is required.');
       return false;
     }
-    if (formData.quantity === '' || isNaN(Number(formData.quantity)) || Number(formData.quantity) <= 0) {
-      setFormError('Quantity must be a number greater than 0');
+
+    if (
+      formData.quantity === '' ||
+      isNaN(Number(formData.quantity)) ||
+      Number(formData.quantity) <= 0
+    ) {
+      setFormError('Quantity must be a number greater than 0.');
       return false;
     }
+
     return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!validateForm()) return;
+
+    setFormError('');
 
     try {
       const defaultExpiry = new Date();
@@ -97,7 +124,9 @@ export default function PantryPage() {
         category: formData.category,
         quantity: parseInt(formData.quantity, 10),
         unit: formData.unit.trim(),
-        expiryDate: formData.expiryDate ? new Date(formData.expiryDate) : defaultExpiry,
+        expiryDate: formData.expiryDate
+          ? new Date(formData.expiryDate)
+          : defaultExpiry,
       };
 
       const res = editingId
@@ -112,23 +141,37 @@ export default function PantryPage() {
             body: JSON.stringify(payload),
           });
 
+      const data = await res.json().catch(() => null);
+
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to save item (status ${res.status}).`);
+        throw new Error(getApiErrorMessage(data, 'Failed to save pantry item.'));
       }
 
-      setFormData({ ingredientName: '', category: 'Vegetables', quantity: 1, unit: '', expiryDate: '' });
+      setFormData({
+        ingredientName: '',
+        category: 'Vegetables',
+        quantity: 1,
+        unit: '',
+        expiryDate: '',
+      });
       setEditingId(null);
       setFormError('');
       setShowPantryModal(false);
-      fetchPantryItems();
+
+      await fetchPantryItems();
     } catch (error) {
-      setFormError(error.message || 'Failed to save item. Please try again.');
+      setFormError(formatFetchError(error) || 'Failed to save item. Please try again.');
     }
   };
 
   const openAddModal = () => {
-    setFormData({ ingredientName: '', category: 'Vegetables', quantity: 1, unit: '', expiryDate: '' });
+    setFormData({
+      ingredientName: '',
+      category: 'Vegetables',
+      quantity: 1,
+      unit: '',
+      expiryDate: '',
+    });
     setEditingId(null);
     setFormError('');
     setShowPantryModal(true);
@@ -150,34 +193,52 @@ export default function PantryPage() {
   const closePantryModal = () => {
     setShowPantryModal(false);
     setEditingId(null);
-    setFormData({ ingredientName: '', category: 'Vegetables', quantity: 1, unit: '', expiryDate: '' });
+    setFormData({
+      ingredientName: '',
+      category: 'Vegetables',
+      quantity: 1,
+      unit: '',
+      expiryDate: '',
+    });
     setFormError('');
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
+    if (!window.confirm('Are you sure you want to delete this item?')) return;
+
+    setPageError('');
 
     try {
-      await fetch(`${API}/api/pantry/${id}`, { method: 'DELETE' });
-      fetchPantryItems();
+      const res = await fetch(`${API}/api/pantry/${id}`, {
+        method: 'DELETE',
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(getApiErrorMessage(data, 'Failed to delete pantry item.'));
+      }
+
+      await fetchPantryItems();
     } catch (error) {
-      console.error('Error deleting item:', error);
+      console.error('Error deleting item:', formatFetchError(error));
+      setPageError(formatFetchError(error));
     }
   };
 
   const filteredPantryItems = useMemo(() => {
     let items = pantryItems;
-    
+
     if (searchQuery.trim()) {
       items = items.filter((item) =>
         matchesSearch(searchQuery, item.ingredientName, item.category, item.unit)
       );
     }
-    
+
     if (categoryFilter) {
       items = items.filter((item) => item.category === categoryFilter);
     }
-    
+
     return items;
   }, [pantryItems, searchQuery, categoryFilter]);
 
@@ -219,9 +280,16 @@ export default function PantryPage() {
         </div>
       )}
 
+      {pageError && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3 whitespace-pre-line">
+          {pageError}
+        </p>
+      )}
+
       <div className="soft-card p-6 sm:p-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h2 className="section-title">{isSearching ? 'Search Results' : 'Ingredients'}</h2>
+
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
             {!isSearching && (
               <select
@@ -235,6 +303,7 @@ export default function PantryPage() {
                 ))}
               </select>
             )}
+
             <div className="flex items-center gap-2 sm:gap-3">
               {isSearching ? (
                 <span className="text-sm text-slate-500">
@@ -251,15 +320,23 @@ export default function PantryPage() {
                       <path d="M12 5v14M5 12h14" strokeLinecap="round" />
                     </svg>
                   </button>
+
                   <button
-                    onClick={() => { setShowScanner((v) => !v); setShowDetector(false); }}
+                    onClick={() => {
+                      setShowScanner((v) => !v);
+                      setShowDetector(false);
+                    }}
                     title="Scan a grocery receipt"
                     className="w-10 h-10 flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark transition-colors shadow-sm text-lg"
                   >
                     🧾
                   </button>
+
                   <button
-                    onClick={() => { setShowDetector((v) => !v); setShowScanner(false); }}
+                    onClick={() => {
+                      setShowDetector((v) => !v);
+                      setShowScanner(false);
+                    }}
                     title="Detect items from a photo"
                     className="w-10 h-10 flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-dark transition-colors shadow-sm text-lg"
                   >
@@ -286,6 +363,7 @@ export default function PantryPage() {
                   </svg>
                 </button>
               </div>
+
               <PantryScanner
                 onAdded={() => {
                   fetchPantryItems();
@@ -311,6 +389,7 @@ export default function PantryPage() {
                   </svg>
                 </button>
               </div>
+
               <PantryObjectDetector
                 onAdded={() => {
                   fetchPantryItems();
@@ -341,9 +420,11 @@ export default function PantryPage() {
                       {item.category}
                     </span>
                   </div>
+
                   <p className="text-sm text-slate-600 mb-1">
                     Quantity: <span className="font-semibold">{item.quantity}</span> {item.unit}
                   </p>
+
                   <p className="text-xs text-slate-500">
                     Expires: {formatDate(item.expiryDate)}
                     {isExpired(item.expiryDate) && (
@@ -354,6 +435,7 @@ export default function PantryPage() {
                     )}
                   </p>
                 </div>
+
                 <div className="flex gap-3">
                   <button
                     onClick={() => handleEdit(item)}
@@ -361,6 +443,7 @@ export default function PantryPage() {
                   >
                     Edit
                   </button>
+
                   <button
                     onClick={() => handleDelete(item.id)}
                     className="text-red-600 hover:text-red-800 font-semibold text-sm px-3 py-1 rounded-lg hover:bg-red-50 transition-colors"
@@ -393,6 +476,7 @@ export default function PantryPage() {
             <h2 className="section-title text-xl mb-5">
               {editingId ? 'Edit Pantry Item' : 'Add to Pantry'}
             </h2>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Name *</label>
@@ -406,6 +490,7 @@ export default function PantryPage() {
                   required
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Category *</label>
                 <select
@@ -420,6 +505,7 @@ export default function PantryPage() {
                   ))}
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Quantity *</label>
                 <input
@@ -432,6 +518,7 @@ export default function PantryPage() {
                   required
                 />
               </div>
+
               {!editingId && (
                 <>
                   <div>
@@ -445,6 +532,7 @@ export default function PantryPage() {
                       placeholder="e.g., kg, pieces, cups"
                     />
                   </div>
+
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Expiry Date</label>
                     <input
@@ -457,13 +545,18 @@ export default function PantryPage() {
                   </div>
                 </>
               )}
+
               {formError && (
-                <p className="text-red-500 text-sm font-medium bg-red-50 p-3 rounded-xl">{formError}</p>
+                <p className="text-red-500 text-sm font-medium bg-red-50 p-3 rounded-xl whitespace-pre-line">
+                  {formError}
+                </p>
               )}
+
               <div className="flex gap-3 pt-2">
                 <button type="submit" className="flex-1 btn-primary">
                   {editingId ? 'Save Changes' : 'Add Item'}
                 </button>
+
                 <button
                   type="button"
                   onClick={closePantryModal}

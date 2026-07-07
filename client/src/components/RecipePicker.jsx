@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { API_BASE, parseApiResponse, formatFetchError } from "../utils/apiError";
 
-const API = "http://localhost:5237";
+const API = API_BASE;
 
 export default function RecipePicker({ userId = 1, onSelect, onClose }) {
   const [recipes, setRecipes] = useState([]);
@@ -11,19 +12,29 @@ export default function RecipePicker({ userId = 1, onSelect, onClose }) {
     let cancelled = false;
 
     async function load() {
+      setLoading(true);
+      setError("");
+
       try {
         const res = await fetch(`${API}/api/mealplans/recipes/${userId}`);
-        if (!res.ok) throw new Error("Couldn't load your recipes.");
-        const data = await res.json();
-        if (!cancelled) setRecipes(data);
+        const data = await parseApiResponse(res, "Couldn't load your recipes.");
+
+        if (!cancelled) {
+          setRecipes(data);
+        }
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) {
+          setError(formatFetchError(err));
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
     load();
+
     return () => {
       cancelled = true;
     };
@@ -39,7 +50,13 @@ export default function RecipePicker({ userId = 1, onSelect, onClose }) {
       </div>
 
       {loading && <p className="text-sm text-slate-500">Loading your recipes…</p>}
-      {error && <p className="text-sm text-red-500">{error}</p>}
+
+      {error && (
+        <p className="text-sm text-red-500 whitespace-pre-line">
+          {error}
+        </p>
+      )}
+
       {!loading && !error && recipes.length === 0 && (
         <p className="text-sm text-slate-500">You don't have any saved recipes yet.</p>
       )}

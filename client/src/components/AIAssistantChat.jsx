@@ -3,8 +3,9 @@ import ReactMarkdown from "react-markdown";
 import PreferencesForm from "./PreferencesForm";
 import RecipePicker from "./RecipePicker";
 import { currentWeekStart, addWeeks, formatWeekLabel, formatWeekStart, parseWeekStart } from "../utils/weekUtils";
+import { API_BASE, getApiErrorMessage, formatFetchError } from "../utils/apiError";
 
-const API = "http://localhost:5237";
+const API = API_BASE;
 const USER_ID = 1; // TODO: replace with the real authenticated user id
 
 async function postJson(path, body) {
@@ -13,16 +14,21 @@ async function postJson(path, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
   });
-  const data = await res.json().catch(() => ({}));
+
+  const data = await res.json().catch(() => null);
+
   if (!res.ok) {
     if (res.status === 503) {
       throw new Error("The AI service is temporarily unavailable. Please try again in a moment.");
     }
+
     if (res.status === 429) {
       throw new Error("The AI service is busy right now. Please wait a moment and try again.");
     }
-    throw new Error(data.detail || data.error || `Request failed (${res.status})`);
+
+    throw new Error(getApiErrorMessage(data, `Request failed (${res.status})`));
   }
+
   return data;
 }
 
@@ -85,7 +91,7 @@ export default function AIAssistantChat() {
   function pushError(err) {
     setMessages((prev) => [
       ...prev,
-      { role: "assistant", text: `Sorry, something went wrong: ${err.message}` },
+      { role: "assistant", text: `Sorry, something went wrong: ${formatFetchError(err)}` },
     ]);
   }
 
@@ -154,8 +160,11 @@ export default function AIAssistantChat() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(plan),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || "Failed to save plan");
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(getApiErrorMessage(data, "Failed to save plan."));
+      }
       setMessages((prev) => prev.map((m, i) => (i === index ? { ...m, saved: true } : m)));
       const weekLabel = formatWeekLabel(addWeeks(parseWeekStart(currentWeekStart()), selectedWeekOffset));
       pushAssistant({ text: `Saved! Your meal planner page now has the plan for ${weekLabel}. ✅` });
@@ -208,7 +217,7 @@ export default function AIAssistantChat() {
   async function saveGeneratedRecipe(recipe, index) {
     setLoading(true);
     try {
-      await postJson("/api/recipes", {
+      await postJson("/api/recipe", {
         title: recipe.title,
         ingredients: recipe.ingredients,
         steps: recipe.instructions || "",
@@ -268,11 +277,10 @@ export default function AIAssistantChat() {
           {messages.map((m, i) => (
             <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
               <div
-                className={`inline-block px-4 py-2.5 rounded-2xl max-w-[85%] text-left text-sm leading-relaxed ${
-                  m.role === "user"
-                    ? "bg-brand text-white whitespace-pre-wrap"
-                    : "bg-slate-100 text-slate-800"
-                }`}
+                className={`inline-block px-4 py-2.5 rounded-2xl max-w-[85%] text-left text-sm leading-relaxed ${m.role === "user"
+                  ? "bg-brand text-white whitespace-pre-wrap"
+                  : "bg-slate-100 text-slate-800"
+                  }`}
               >
                 {m.role === "assistant" ? (
                   <ReactMarkdown components={markdownComponents}>{m.text}</ReactMarkdown>

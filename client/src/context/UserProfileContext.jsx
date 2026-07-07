@@ -3,8 +3,14 @@ import {
   getStoredProfilePicture,
   setStoredProfilePicture,
 } from "../utils/profilePictureStorage";
+import {
+  API_BASE,
+  parseApiResponse,
+  getApiErrorMessage,
+  formatFetchError,
+} from "../utils/apiError";
 
-const API = "http://localhost:5237";
+const API = API_BASE;
 
 const UserProfileContext = createContext(null);
 
@@ -21,14 +27,17 @@ export function UserProfileProvider({ token, username, children }) {
       setLoading(false);
       return;
     }
+
     try {
       const res = await fetch(`${API}/api/auth/profile`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed to load profile.");
-      const data = await res.json();
+
+      const data = await parseApiResponse(res, "Failed to load profile.");
+
       const name = data.username || username || "";
       const localPicture = getStoredProfilePicture(name);
+
       setProfile({
         username: name,
         fullName: data.fullName || "",
@@ -36,6 +45,7 @@ export function UserProfileProvider({ token, username, children }) {
       });
     } catch {
       const localPicture = getStoredProfilePicture(username);
+
       setProfile((prev) => ({
         ...prev,
         username: username || prev.username,
@@ -53,11 +63,19 @@ export function UserProfileProvider({ token, username, children }) {
 
   const updateProfilePicture = useCallback(
     async (profilePicture) => {
-      const name = profile.username || username;
+      const name = profile.username || username || "";
       const nextPicture = profilePicture || null;
 
       setStoredProfilePicture(name, nextPicture);
       setProfile((prev) => ({ ...prev, profilePicture: nextPicture }));
+
+      if (!token) {
+        return {
+          message: "Profile picture saved on this device.",
+          profilePicture: nextPicture,
+          localOnly: true,
+        };
+      }
 
       try {
         const res = await fetch(`${API}/api/auth/profile/picture`, {
@@ -69,7 +87,7 @@ export function UserProfileProvider({ token, username, children }) {
           body: JSON.stringify({ profilePicture: nextPicture }),
         });
 
-        const data = await res.json().catch(() => ({}));
+        const data = await res.json().catch(() => null);
 
         if (res.status === 404) {
           return {
@@ -82,27 +100,36 @@ export function UserProfileProvider({ token, username, children }) {
 
         if (!res.ok) {
           throw new Error(
-            data.message || `Could not save profile picture (HTTP ${res.status}).`
+            getApiErrorMessage(
+              data,
+              `Could not save profile picture (HTTP ${res.status}).`
+            )
           );
         }
 
-        const saved = data.profilePicture || null;
+        const saved = data?.profilePicture || null;
+
         setStoredProfilePicture(name, saved);
         setProfile((prev) => ({ ...prev, profilePicture: saved }));
 
-        return data;
+        return {
+          ...data,
+          profilePicture: saved,
+        };
       } catch (error) {
+        const message = formatFetchError(error);
+
         if (nextPicture) {
           return {
-            message:
-              error.message?.includes("fetch")
-                ? "Profile picture saved on this device only (server unreachable)."
-                : `${error.message} Picture kept on this device.`,
+            message: message.includes("Unable to connect")
+              ? "Profile picture saved on this device only (server unreachable)."
+              : `${message} Picture kept on this device.`,
             profilePicture: nextPicture,
             localOnly: true,
           };
         }
-        throw error;
+
+        throw new Error(message);
       }
     },
     [token, username, profile.username]
@@ -127,8 +154,10 @@ export function UserProfileProvider({ token, username, children }) {
 
 export function useUserProfile() {
   const ctx = useContext(UserProfileContext);
+
   if (!ctx) {
     throw new Error("useUserProfile must be used within UserProfileProvider");
   }
+
   return ctx;
 }

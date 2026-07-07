@@ -16,8 +16,9 @@ import { getCategoryGradient } from "../utils/recipeCategoryColors";
 import { useSearch } from "./layout/AppLayout";
 import { matchesSearch } from "../utils/search";
 import { getRecipeCategoryNames } from "../utils/recipeCategories";
+import { API_BASE, parseApiResponse, formatFetchError } from "../utils/apiError";
 
-const API = "http://localhost:5237";
+const API = API_BASE;
 
 const emptyForm = {
   userId: 1,
@@ -30,7 +31,27 @@ const emptyForm = {
   imageUrl: "",
 };
 
-const FALLBACK_CATEGORIES = ["Asian", "Breakfast", "Comfort Food", "Curry", "Dessert", "Grilled", "Healthy", "Italian", "Kids Friendly", "Mediterranean", "Mexican", "Pasta", "Quick & Easy", "Salad", "Sandwich", "Seafood", "Soup", "Thai", "Veggie"];
+const FALLBACK_CATEGORIES = [
+  "Asian",
+  "Breakfast",
+  "Comfort Food",
+  "Curry",
+  "Dessert",
+  "Grilled",
+  "Healthy",
+  "Italian",
+  "Kids Friendly",
+  "Mediterranean",
+  "Mexican",
+  "Pasta",
+  "Quick & Easy",
+  "Salad",
+  "Sandwich",
+  "Seafood",
+  "Soup",
+  "Thai",
+  "Veggie",
+];
 
 function RecipesPage({ username, isAdmin = false }) {
   const { displayName } = useUserProfile();
@@ -50,11 +71,13 @@ function RecipesPage({ username, isAdmin = false }) {
 
   const loadRecipes = useCallback(async (searchTerm = debouncedSearch) => {
     setLoading(true);
+
     try {
       let data = [];
 
       if (showFavoritesOnly && username) {
         data = await getFavoriteRecipes(username);
+
         if (searchTerm.trim()) {
           data = data.filter((recipe) =>
             matchesSearch(
@@ -78,7 +101,7 @@ function RecipesPage({ username, isAdmin = false }) {
       }
     } catch (err) {
       console.error(err);
-      setError("Failed to load recipes.");
+      setError(formatFetchError(err) || "Failed to load recipes.");
     } finally {
       setLoading(false);
     }
@@ -87,17 +110,24 @@ function RecipesPage({ username, isAdmin = false }) {
   async function loadCategories() {
     try {
       const res = await fetch(`${API}/api/dashboard/categories`);
-      if (res.ok) {
-        const data = await res.json();
-        setCategoryList(data);
-        setCategories(data.map((c) => c.name).filter(Boolean).sort());
-        return;
-      }
-    } catch {
-      // fall through to fallback below
+      const data = await parseApiResponse(res, "Could not load categories.");
+
+      setCategoryList(data);
+      setCategories(data.map((c) => c.name).filter(Boolean).sort());
+      return;
+    } catch (err) {
+      console.error("Using fallback categories:", formatFetchError(err));
     }
+
     setCategories([...FALLBACK_CATEGORIES].sort());
-    setCategoryList(FALLBACK_CATEGORIES.map((name, i) => ({ id: i, name, emoji: "", colorKey: "" })));
+    setCategoryList(
+      FALLBACK_CATEGORIES.map((name, i) => ({
+        id: i,
+        name,
+        emoji: "",
+        colorKey: "",
+      }))
+    );
   }
 
   useEffect(() => {
@@ -125,10 +155,11 @@ function RecipesPage({ username, isAdmin = false }) {
       } else {
         await addFavoriteRecipe(recipeId, username);
       }
+
       await loadRecipes();
     } catch (err) {
       console.error(err);
-      setError("Failed to update favorite.");
+      setError(formatFetchError(err) || "Failed to update favorite.");
     }
   }
 
@@ -140,6 +171,7 @@ function RecipesPage({ username, isAdmin = false }) {
   function toggleCategoryId(id) {
     setForm((prev) => {
       const has = prev.categoryIds.includes(id);
+
       return {
         ...prev,
         categoryIds: has
@@ -157,6 +189,7 @@ function RecipesPage({ username, isAdmin = false }) {
     if (form.imageUrl.trim() && !form.imageUrl.startsWith("http")) {
       return "Image URL must start with http or https.";
     }
+
     return "";
   }
 
@@ -195,6 +228,7 @@ function RecipesPage({ username, isAdmin = false }) {
     setError("");
 
     const validationError = validateForm();
+
     if (validationError) {
       setError(validationError);
       return;
@@ -229,7 +263,7 @@ function RecipesPage({ username, isAdmin = false }) {
       await loadRecipes();
     } catch (err) {
       console.error(err);
-      setError("Failed to save recipe.");
+      setError(formatFetchError(err) || "Failed to save recipe.");
     }
   }
 
@@ -242,7 +276,7 @@ function RecipesPage({ username, isAdmin = false }) {
       await loadRecipes();
     } catch (err) {
       console.error(err);
-      setError("Failed to delete recipe.");
+      setError(formatFetchError(err) || "Failed to delete recipe.");
     }
   }
 
@@ -252,16 +286,18 @@ function RecipesPage({ username, isAdmin = false }) {
     setActiveCategory(null);
     setShowFavoritesOnly(false);
     setLoading(true);
+
     try {
       const data = await getRecipes("", "");
       setRecipes(data);
+
       if (username) {
         const favorites = await getFavoriteRecipes(username);
         setFavoriteIds(new Set(favorites.map((recipe) => recipe.id)));
       }
     } catch (err) {
       console.error(err);
-      setError("Failed to load recipes.");
+      setError(formatFetchError(err) || "Failed to load recipes.");
     } finally {
       setLoading(false);
     }
@@ -279,6 +315,7 @@ function RecipesPage({ username, isAdmin = false }) {
             Browse, search, and manage your recipe collection
           </p>
         </div>
+
         <button type="button" onClick={openCreateModal} className="btn-primary text-sm shrink-0">
           + Create New Recipe
         </button>
@@ -349,8 +386,8 @@ function RecipesPage({ username, isAdmin = false }) {
                   "baby"
                 )} flex items-center justify-center text-2xl sm:text-3xl border-2 transition-all ${
                   activeCategory === cat
-                    ? 'border-brand shadow-md scale-105'
-                    : 'border-brand/30 group-hover:border-brand/60'
+                    ? "border-brand shadow-md scale-105"
+                    : "border-brand/30 group-hover:border-brand/60"
                 }`}
               >
                 {cat === "Veggie" ? "🥦" :
@@ -373,7 +410,8 @@ function RecipesPage({ username, isAdmin = false }) {
                  cat === "Healthy" ? "💚" :
                  cat === "Kids Friendly" ? "👶" : "🍽️"}
               </div>
-              <span className={`text-xs font-semibold ${activeCategory === cat ? 'text-brand' : 'text-slate-600'}`}>
+
+              <span className={`text-xs font-semibold ${activeCategory === cat ? "text-brand" : "text-slate-600"}`}>
                 {cat}
               </span>
             </button>
@@ -382,7 +420,7 @@ function RecipesPage({ username, isAdmin = false }) {
       </section>
 
       {error && !showModal && (
-        <p className="text-red-600 text-sm font-medium bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+        <p className="text-red-600 text-sm font-medium bg-red-50 border border-red-100 rounded-xl px-4 py-3 whitespace-pre-line">
           {error}
         </p>
       )}
@@ -531,6 +569,7 @@ function RecipesPage({ username, isAdmin = false }) {
                 <div className="flex flex-wrap gap-2">
                   {categoryList.map((cat) => {
                     const selected = form.categoryIds.includes(cat.id);
+
                     return (
                       <button
                         key={cat.id}
@@ -594,7 +633,9 @@ function RecipesPage({ username, isAdmin = false }) {
               </div>
 
               {error && (
-                <p className="text-red-500 text-sm font-medium bg-red-50 p-3 rounded-xl">{error}</p>
+                <p className="text-red-500 text-sm font-medium bg-red-50 p-3 rounded-xl whitespace-pre-line">
+                  {error}
+                </p>
               )}
 
               <div className="flex gap-3 pt-2">

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { DIET_OPTIONS } from "../utils/dietLabels";
+import { API_BASE, parseApiResponse, formatFetchError } from "../utils/apiError";
 
-const API = "http://localhost:5237";
+const API = API_BASE;
 const USER_ID = 1;
 
 const ALLERGY_OPTIONS = [
@@ -28,38 +29,55 @@ export default function PreferencesForm() {
   const [dietType, setDietType] = useState("none");
   const [allergies, setAllergies] = useState("");
   const [status, setStatus] = useState("");
+  const [statusType, setStatusType] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadPreferences() {
       try {
         const res = await fetch(`${API}/api/ai/preferences/${USER_ID}`);
-        const data = await res.json();
-        setGoal(data.goal);
-        setDietType(data.dietType);
+
+        // If no saved preferences exist yet, keep default values.
+        if (res.status === 404) return;
+
+        const data = await parseApiResponse(res, "Could not load preferences.");
+
+        setGoal(data.goal || "maintain");
+        setDietType(data.dietType || "none");
         setAllergies(data.allergies || "");
-      } catch {
-        // No saved preferences yet
+      } catch (err) {
+        setStatus(formatFetchError(err));
+        setStatusType("error");
       } finally {
         setLoading(false);
       }
     }
+
     loadPreferences();
   }, []);
 
   async function handleSave() {
     setStatus("Saving...");
+    setStatusType("");
+
     try {
       const res = await fetch(`${API}/api/ai/preferences`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: USER_ID, goal, dietType, allergies }),
       });
-      if (!res.ok) throw new Error("Failed to save");
+
+      await parseApiResponse(res, "Failed to save preferences.");
+
       setStatus("Saved!");
-      setTimeout(() => setStatus(""), 2000);
-    } catch {
-      setStatus("Failed to save. Try again.");
+      setStatusType("success");
+      setTimeout(() => {
+        setStatus("");
+        setStatusType("");
+      }, 2000);
+    } catch (err) {
+      setStatus(formatFetchError(err));
+      setStatusType("error");
     }
   }
 
@@ -84,6 +102,7 @@ export default function PreferencesForm() {
             <option value="maintain">Maintain</option>
           </select>
         </div>
+
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5">Diet Type</label>
           <select
@@ -110,11 +129,14 @@ export default function PreferencesForm() {
                 checked={allergies.split(",").includes(allergy)}
                 onChange={(e) => {
                   const selected = allergies ? allergies.split(",").filter(Boolean) : [];
-                  if (e.target.checked) selected.push(allergy);
-                  else {
+
+                  if (e.target.checked) {
+                    selected.push(allergy);
+                  } else {
                     const index = selected.indexOf(allergy);
                     if (index > -1) selected.splice(index, 1);
                   }
+
                   setAllergies(selected.join(","));
                 }}
                 className="accent-brand rounded"
@@ -123,6 +145,7 @@ export default function PreferencesForm() {
             </label>
           ))}
         </div>
+
         {allergies && (
           <p className="text-xs text-slate-500 mt-3">
             <strong>Selected:</strong> {allergies}
@@ -134,7 +157,20 @@ export default function PreferencesForm() {
         <button onClick={handleSave} className="btn-primary text-sm">
           Save Preferences
         </button>
-        {status && <span className="text-xs text-slate-500">{status}</span>}
+
+        {status && (
+          <span
+            className={`text-xs whitespace-pre-line ${
+              statusType === "success"
+                ? "text-green-700"
+                : statusType === "error"
+                  ? "text-red-600"
+                  : "text-slate-500"
+            }`}
+          >
+            {status}
+          </span>
+        )}
       </div>
     </div>
   );

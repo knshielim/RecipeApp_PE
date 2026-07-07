@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { API_BASE, getApiErrorMessage, formatFetchError } from "../utils/apiError";
 
-const API = "http://localhost:5237";
+const API = API_BASE;
 
 export default function PantryObjectDetector({ onAdded }) {
   const [file, setFile] = useState(null);
@@ -9,30 +10,58 @@ export default function PantryObjectDetector({ onAdded }) {
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (preview) {
+        URL.revokeObjectURL(preview);
+      }
+    };
+  }, [preview]);
 
   function onPick(e) {
-    const f = e.target.files[0];
+    const f = e.target.files?.[0];
+
     if (!f) return;
+
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
+
     setFile(f);
     setPreview(URL.createObjectURL(f));
     setResult(null);
     setDone(false);
+    setError("");
   }
 
   async function detect() {
     if (!file) return;
+
     setLoading(true);
     setResult(null);
     setDone(false);
+    setError("");
+
     try {
       const form = new FormData();
       form.append("image", file);
-      const res = await fetch(`${API}/api/detect`, { method: "POST", body: form });
-      if (!res.ok) throw new Error("Failed to detect objects");
-      const data = await res.json();
+
+      const res = await fetch(`${API}/api/detect`, {
+        method: "POST",
+        body: form,
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(getApiErrorMessage(data, "Failed to detect objects."));
+      }
+
       setResult(data);
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      setError(formatFetchError(err));
     } finally {
       setLoading(false);
     }
@@ -40,19 +69,33 @@ export default function PantryObjectDetector({ onAdded }) {
 
   async function addDetectedToPantry() {
     if (!result?.objects?.length) return;
+
     setAdding(true);
+    setError("");
+
     try {
-      const items = result.objects.map((o) => ({ name: o.label, quantity: "1", unit: o.unit || "" }));
+      const items = result.objects.map((o) => ({
+        name: o.label,
+        quantity: "1",
+        unit: o.unit || "",
+      }));
+
       const res = await fetch(`${API}/api/pantry/bulk-add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(items),
       });
-      if (!res.ok) throw new Error("Failed to add to pantry");
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(getApiErrorMessage(data, "Failed to add items to pantry."));
+      }
+
       setDone(true);
       onAdded?.();
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      setError(formatFetchError(err));
     } finally {
       setAdding(false);
     }
@@ -77,6 +120,7 @@ export default function PantryObjectDetector({ onAdded }) {
             </p>
             <p className="text-xs text-slate-400">PNG, JPG, GIF (MAX. 10MB)</p>
           </div>
+
           <input
             type="file"
             accept="image/*"
@@ -89,24 +133,30 @@ export default function PantryObjectDetector({ onAdded }) {
       {preview && (
         <div className="relative mb-3">
           <img src={preview} alt="preview" className="rounded-xl w-full" />
-          {result &&
-            result.objects.map((o, i) => (
-              <div
-                key={i}
-                className="absolute border-2 border-red-500"
-                style={{
-                  top: `${o.yMin / 10}%`,
-                  left: `${o.xMin / 10}%`,
-                  width: `${(o.xMax - o.xMin) / 10}%`,
-                  height: `${(o.yMax - o.yMin) / 10}%`,
-                }}
-              >
-                <span className="absolute -top-5 left-0 bg-red-500 text-white text-xs px-1 rounded">
-                  {o.label}
-                </span>
-              </div>
-            ))}
+
+          {result?.objects?.map((o, i) => (
+            <div
+              key={i}
+              className="absolute border-2 border-red-500"
+              style={{
+                top: `${o.yMin / 10}%`,
+                left: `${o.xMin / 10}%`,
+                width: `${(o.xMax - o.xMin) / 10}%`,
+                height: `${(o.yMax - o.yMin) / 10}%`,
+              }}
+            >
+              <span className="absolute -top-5 left-0 bg-red-500 text-white text-xs px-1 rounded">
+                {o.label}
+              </span>
+            </div>
+          ))}
         </div>
+      )}
+
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3 whitespace-pre-line">
+          {error}
+        </p>
       )}
 
       <button
@@ -120,6 +170,7 @@ export default function PantryObjectDetector({ onAdded }) {
       {result && (
         <div className="mt-4 p-3 bg-slate-100 rounded-xl text-sm">
           <p className="italic mb-2">{result.summary}</p>
+
           <ul className="list-disc pl-5 mb-3">
             {result.objects.map((o, i) => (
               <li key={i}>
@@ -136,6 +187,7 @@ export default function PantryObjectDetector({ onAdded }) {
           >
             {adding ? "Adding..." : `Add ${result.objects.length} items to Pantry`}
           </button>
+
           {done && (
             <span className="ml-3 text-sm text-green-600">Added to pantry ✓</span>
           )}

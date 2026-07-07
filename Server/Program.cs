@@ -854,7 +854,7 @@ app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest? req, Kernel
 
 // ---------- Save a generated (or manually written) recipe ----------
 
-app.MapPost("/api/recipes", async (SaveRecipeRequest? req, AppDbContext db, HttpContext http) =>
+app.MapPost("/api/recipe", async (SaveRecipeRequest? req, AppDbContext db, HttpContext http) =>
 {
     if (req == null)
     {

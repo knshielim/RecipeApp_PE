@@ -1,10 +1,23 @@
 import { useState, useEffect } from "react";
+import { API_BASE, getApiErrorMessage, formatFetchError } from "../utils/apiError";
 
-const API = "http://localhost:5237";
+const API = API_BASE;
+const USER_ID = 1;
+
+async function readApiResponse(res, fallback = "Request failed.") {
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new Error(getApiErrorMessage(data, fallback));
+  }
+
+  return data;
+}
 
 export default function PantryView() {
   const [pantry, setPantry] = useState([]);
   const [loadingPantry, setLoadingPantry] = useState(true);
+  const [pantryError, setPantryError] = useState("");
 
   // "What can I make" state
   const [makeSuggestions, setMakeSuggestions] = useState("");
@@ -21,35 +34,51 @@ export default function PantryView() {
 
   async function fetchPantry() {
     setLoadingPantry(true);
+    setPantryError("");
+
     try {
-      const res = await fetch(`${API}/api/pantry`);
-      const data = await res.json();
-      setPantry(data);
-    } catch {
+      const res = await fetch(`${API}/api/pantry/${USER_ID}`);
+      const data = await readApiResponse(res, "Could not load pantry items.");
+
+      setPantry(Array.isArray(data) ? data : []);
+    } catch (err) {
       setPantry([]);
+      setPantryError(formatFetchError(err));
     } finally {
       setLoadingPantry(false);
     }
   }
 
   async function removeItem(id) {
+    setPantryError("");
+
     try {
-      await fetch(`${API}/api/pantry/${id}`, { method: "DELETE" });
+      const res = await fetch(`${API}/api/pantry/${id}`, {
+        method: "DELETE",
+      });
+
+      await readApiResponse(res, "Failed to remove item.");
+
       setPantry((prev) => prev.filter((p) => p.id !== id));
     } catch (err) {
-      alert("Failed to remove item");
+      setPantryError(formatFetchError(err));
     }
   }
 
   async function whatCanIMake() {
     setLoadingMake(true);
     setMakeSuggestions("");
+
     try {
-      const res = await fetch(`${API}/api/ai/what-can-i-make`, { method: "POST" });
-      const data = await res.json();
-      setMakeSuggestions(data.reply || data.detail || "No suggestions available.");
+      const res = await fetch(`${API}/api/ai/what-can-i-make`, {
+        method: "POST",
+      });
+
+      const data = await readApiResponse(res, "Could not generate suggestions.");
+
+      setMakeSuggestions(data.reply || "No suggestions available.");
     } catch (err) {
-      setMakeSuggestions("Something went wrong — please try again.");
+      setMakeSuggestions(formatFetchError(err));
     } finally {
       setLoadingMake(false);
     }
@@ -57,18 +86,22 @@ export default function PantryView() {
 
   async function checkMissingIngredients() {
     if (!mealInput.trim()) return;
+
     setLoadingMissing(true);
     setMissingResult("");
+
     try {
       const res = await fetch(`${API}/api/ai/missing-ingredients`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meal: mealInput }),
+        body: JSON.stringify({ meal: mealInput.trim() }),
       });
-      const data = await res.json();
-      setMissingResult(data.reply || data.detail || "No result.");
+
+      const data = await readApiResponse(res, "Could not check missing ingredients.");
+
+      setMissingResult(data.reply || "No result.");
     } catch (err) {
-      setMissingResult("Something went wrong — please try again.");
+      setMissingResult(formatFetchError(err));
     } finally {
       setLoadingMissing(false);
     }
@@ -76,7 +109,6 @@ export default function PantryView() {
 
   return (
     <div className="w-full max-w-xl space-y-4">
-
       {/* Pantry list */}
       <div className="bg-white rounded-2xl shadow p-4">
         <div className="flex justify-between items-center mb-3">
@@ -88,6 +120,12 @@ export default function PantryView() {
             Refresh
           </button>
         </div>
+
+        {pantryError && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3 whitespace-pre-line">
+            {pantryError}
+          </p>
+        )}
 
         {loadingPantry ? (
           <p className="text-sm text-slate-400">Loading...</p>
@@ -102,9 +140,14 @@ export default function PantryView() {
                 key={item.id}
                 className="flex justify-between items-center text-sm px-2 py-1 rounded-lg hover:bg-slate-50"
               >
-                <span className="capitalize">{item.name}</span>
+                <span className="capitalize">
+                  {item.ingredientName || item.name}
+                </span>
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400">{item.quantity}</span>
+                  <span className="text-slate-400">
+                    {item.quantity}
+                    {item.unit ? ` ${item.unit}` : ""}
+                  </span>
                   <button
                     onClick={() => removeItem(item.id)}
                     className="text-red-400 hover:text-red-600 text-xs"

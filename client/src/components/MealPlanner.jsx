@@ -17,6 +17,7 @@ import {
   formatWeekLabel,
   formatWeekStart,
 } from "../utils/weekUtils";
+import { formatFetchError } from "../utils/apiError";
 
 const USER_ID = 1;
 
@@ -153,7 +154,7 @@ export default function MealPlanner() {
       closeForm();
       await fetchData();
     } catch (err) {
-      setFormError(err.message || "Failed to save meal plan.");
+      setFormError(formatFetchError(err) || "Failed to save meal plan.");
     } finally {
       setSaving(false);
     }
@@ -168,7 +169,7 @@ export default function MealPlanner() {
       closeForm();
       await fetchData();
     } catch (err) {
-      setFormError(err.message || "Failed to delete meal plan.");
+      setFormError(formatFetchError(err) || "Failed to delete meal plan.");
     } finally {
       setSaving(false);
     }
@@ -182,7 +183,7 @@ export default function MealPlanner() {
       await autoGenerateWeek(USER_ID, weekStart);
       await fetchData();
     } catch (err) {
-      setGenerateError(err.message || "Failed to generate the weekly plan.");
+      setGenerateError(formatFetchError(err) || "Failed to generate the weekly plan.");
     } finally {
       setGenerating(false);
     }
@@ -199,12 +200,12 @@ export default function MealPlanner() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {!isSearching && (
-      <div>
-        <h1 className="section-title text-2xl">Weekly Meal Planner</h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Assign your saved recipes to each day of the week, then generate your grocery list.
-        </p>
-      </div>
+        <div>
+          <h1 className="section-title text-2xl">Weekly Meal Planner</h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Assign your saved recipes to each day of the week, then generate your grocery list.
+          </p>
+        </div>
       )}
 
       {!isSearching && recipes.length === 0 && (
@@ -216,58 +217,58 @@ export default function MealPlanner() {
       )}
 
       {showPlannerSection && (
-      /* Weekly grid */
-      <div className="soft-card p-6 sm:p-8 overflow-x-auto">
-        <div className="flex justify-between items-center mb-5 flex-wrap gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setWeekOffset((o) => o - 1)}
-              className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm font-medium"
-              title="Previous week"
-            >
-              ←
-            </button>
-            <div>
-              <h2 className="section-title">{isSearching ? "Search Results" : formatWeekLabel(parseWeekStart(weekStart))}</h2>
-              {weekOffset === 0 && !isSearching && (
-                <p className="text-xs text-brand font-medium">This week</p>
+        /* Weekly grid */
+        <div className="soft-card p-6 sm:p-8 overflow-x-auto">
+          <div className="flex justify-between items-center mb-5 flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setWeekOffset((o) => o - 1)}
+                className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm font-medium"
+                title="Previous week"
+              >
+                ←
+              </button>
+              <div>
+                <h2 className="section-title">{isSearching ? "Search Results" : formatWeekLabel(parseWeekStart(weekStart))}</h2>
+                {weekOffset === 0 && !isSearching && (
+                  <p className="text-xs text-brand font-medium">This week</p>
+                )}
+              </div>
+              <button
+                onClick={() => setWeekOffset((o) => o + 1)}
+                className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm font-medium"
+                title="Next week"
+              >
+                →
+              </button>
+              {weekOffset !== 0 && !isSearching && (
+                <button
+                  onClick={() => setWeekOffset(0)}
+                  className="text-xs text-brand font-medium hover:underline ml-1"
+                >
+                  Back to this week
+                </button>
               )}
             </div>
-            <button
-              onClick={() => setWeekOffset((o) => o + 1)}
-              className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm font-medium"
-              title="Next week"
-            >
-              →
-            </button>
-            {weekOffset !== 0 && !isSearching && (
+            {!isSearching && (
               <button
-                onClick={() => setWeekOffset(0)}
-                className="text-xs text-brand font-medium hover:underline ml-1"
+                onClick={() => setConfirmGenerate(true)}
+                disabled={generating || recipes.length === 0}
+                className="btn-primary text-sm disabled:opacity-50"
               >
-                Back to this week
+                {generating ? "Generating..." : "Auto-generate week"}
               </button>
             )}
           </div>
-          {!isSearching && (
-          <button
-            onClick={() => setConfirmGenerate(true)}
-            disabled={generating || recipes.length === 0}
-            className="btn-primary text-sm disabled:opacity-50"
-          >
-            {generating ? "Generating..." : "Auto-generate week"}
-          </button>
-          )}
-        </div>
 
-        {isSearching && (
-          <p className="text-sm text-brand mb-5">
-            {matchingPlanCount} planned meal{matchingPlanCount !== 1 ? "s" : ""} match &ldquo;{searchQuery.trim()}&rdquo;
-          </p>
-        )}
+          {isSearching && (
+            <p className="text-sm text-brand mb-5">
+              {matchingPlanCount} planned meal{matchingPlanCount !== 1 ? "s" : ""} match &ldquo;{searchQuery.trim()}&rdquo;
+            </p>
+          )}
 
           {!isSearching && generateError && (
-            <p className="text-sm font-medium p-3 rounded-lg mb-5 text-red-600 bg-red-50 border border-red-100">
+            <p className="text-sm font-medium p-3 rounded-lg mb-5 text-red-600 bg-red-50 border border-red-100 whitespace-pre-line">
               {generateError}
             </p>
           )}
@@ -296,49 +297,49 @@ export default function MealPlanner() {
               </p>
             )
           ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                <th className="text-left text-slate-500 font-medium px-2 py-1 w-24"></th>
-                {SLOTS.map((slot) => (
-                  <th key={slot} className="text-left text-slate-500 font-medium px-2 py-1 capitalize">
-                    {slot}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {DAYS.map((day) => (
-                <tr key={day} className="border-t border-slate-100">
-                  <td className="px-2 py-2 font-medium text-slate-700">{day}</td>
-                  {SLOTS.map((slot) => {
-                    const plan = findPlan(day, slot);
-                    return (
-                      <td key={slot} className="px-2 py-2">
-                        {plan ? (
-                          <button
-                            onClick={() => openForm(day, slot)}
-                            className="w-full text-left px-4 py-3 rounded-2xl bg-brand-light border border-brand/10 text-slate-700 hover:bg-brand/10 transition-colors"
-                          >
-                            <span className="block font-semibold">{plan.recipeTitle}</span>
-                            <span className="block text-xs text-slate-500">{plan.recipeCategory}</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => openForm(day, slot)}
-                            disabled={recipes.length === 0}
-                            className="w-full px-4 py-3 rounded-2xl border border-dashed border-slate-300 text-slate-400 hover:border-brand hover:text-brand transition-colors disabled:opacity-50"
-                          >
-                            + Add
-                          </button>
-                        )}
-                      </td>
-                    );
-                  })}
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className="text-left text-slate-500 font-medium px-2 py-1 w-24"></th>
+                  {SLOTS.map((slot) => (
+                    <th key={slot} className="text-left text-slate-500 font-medium px-2 py-1 capitalize">
+                      {slot}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {DAYS.map((day) => (
+                  <tr key={day} className="border-t border-slate-100">
+                    <td className="px-2 py-2 font-medium text-slate-700">{day}</td>
+                    {SLOTS.map((slot) => {
+                      const plan = findPlan(day, slot);
+                      return (
+                        <td key={slot} className="px-2 py-2">
+                          {plan ? (
+                            <button
+                              onClick={() => openForm(day, slot)}
+                              className="w-full text-left px-4 py-3 rounded-2xl bg-brand-light border border-brand/10 text-slate-700 hover:bg-brand/10 transition-colors"
+                            >
+                              <span className="block font-semibold">{plan.recipeTitle}</span>
+                              <span className="block text-xs text-slate-500">{plan.recipeCategory}</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => openForm(day, slot)}
+                              disabled={recipes.length === 0}
+                              className="w-full px-4 py-3 rounded-2xl border border-dashed border-slate-300 text-slate-400 hover:border-brand hover:text-brand transition-colors disabled:opacity-50"
+                            >
+                              + Add
+                            </button>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       )}
@@ -408,7 +409,7 @@ export default function MealPlanner() {
             </div>
 
             {formError && (
-              <p className="text-sm font-medium p-3 rounded-lg mt-4 text-red-600 bg-red-50 border border-red-100">
+              <p className="text-sm font-medium p-3 rounded-lg mt-4 text-red-600 bg-red-50 border border-red-100 whitespace-pre-line">
                 {formError}
               </p>
             )}
