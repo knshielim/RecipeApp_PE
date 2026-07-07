@@ -11,22 +11,18 @@ using OpenAI;
 using Microsoft.IdentityModel.Tokens;
 using Server.Services;
 using Server.Models;
+using Server.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ================================================================
-// ---------- Core services (CORS, DbContext, Kernel) ----------
-// ================================================================
-
+// Core services
 builder.Services.AddCors(o => o.AddDefaultPolicy(
     p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite("Data Source=ai_assistant_dev.db"));
 
-// GoogleAI:ApiKey is optional: without it the app still starts and
-// login/non-AI features work fine. Only the AI/vision endpoints will
-// return a "not configured" response until a real key is added.
+// AI setup (optional)
 string? apiKey = builder.Configuration["GoogleAI:ApiKey"];
 if (string.IsNullOrWhiteSpace(apiKey)) apiKey = null;
 
@@ -54,26 +50,18 @@ builder.Services.AddScoped<Kernel>(sp =>
     return kernel;
 });
 
-// ================================================================
-// ---------- Auth / user / meal-planning services ----------
-// ================================================================
-
+// Auth and user services
 builder.Services.AddControllers();
 builder.Services.AddSingleton<TokenService>();
 
-// NOTE: registered as Scoped (not Singleton) because UserStore reads/writes
-// via the scoped AppDbContext — a Singleton here would either throw at
-// resolution time or capture a stale/disposed DbContext across requests.
+// UserStore needs to be scoped to access DbContext
 builder.Services.AddScoped<UserStore>();
-
-builder.Services.AddScoped<IMealPlanSuggester, MealPlanSuggester>(); // Meal Planning module (Member 3)
+builder.Services.AddScoped<IMealPlanSuggester, MealPlanSuggester>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        // Guarded: if Server:Key isn't configured yet, JWT auth is simply
-        // inert instead of crashing the app at startup.
         var key = builder.Configuration["Server:Key"];
         if (!string.IsNullOrWhiteSpace(key))
         {
@@ -123,294 +111,7 @@ using (var scope = app.Services.CreateScope())
         .Where(u => u.Role == "User" && seedOwnerUsernames.Contains(u.Username))
         .ToList();
 
-    var seedRecipes = new[]
-{
-    // Breakfast
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Overnight Oats",
-        Ingredients = "rolled oats, milk, honey, banana, berries",
-        Category = "Breakfast"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Banana Pancakes",
-        Ingredients = "banana, eggs, flour, milk, baking powder",
-        Category = "Breakfast"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Avocado Toast",
-        Ingredients = "bread, avocado, lemon juice, tomato, salt",
-        Category = "Breakfast"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Greek Yogurt Parfait",
-        Ingredients = "greek yogurt, granola, honey, strawberries, blueberries",
-        Category = "Breakfast"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Spinach Mushroom Omelette",
-        Ingredients = "eggs, spinach, mushrooms, cheese, olive oil",
-        Category = "Breakfast"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Tofu Scramble",
-        Ingredients = "tofu, spinach, bell pepper, turmeric, olive oil",
-        Category = "Breakfast"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Breakfast Burrito",
-        Ingredients = "tortilla, eggs, beans, cheese, salsa",
-        Category = "Breakfast"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Peanut Butter Toast",
-        Ingredients = "bread, peanut butter, banana, honey",
-        Category = "Breakfast"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Smoothie Bowl",
-        Ingredients = "banana, berries, yogurt, granola, chia seeds",
-        Category = "Breakfast"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Egg Fried Toast",
-        Ingredients = "bread, eggs, butter, cheese, black pepper",
-        Category = "Breakfast"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Chia Pudding",
-        Ingredients = "chia seeds, milk, honey, mango, coconut",
-        Category = "Breakfast"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Apple Cinnamon Oatmeal",
-        Ingredients = "rolled oats, apple, cinnamon, milk, honey",
-        Category = "Breakfast"
-    },
-
-    // Lunch
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Chicken Rice Bowl",
-        Ingredients = "chicken breast, rice, broccoli, carrot, soy sauce",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Tuna Pasta Salad",
-        Ingredients = "pasta, tuna, corn, cucumber, mayonnaise",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Chickpea Salad Wrap",
-        Ingredients = "tortilla, chickpeas, lettuce, tomato, yogurt dressing",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Vegetable Fried Rice",
-        Ingredients = "rice, peas, carrot, corn, soy sauce",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Lentil Soup",
-        Ingredients = "lentils, carrot, onion, garlic, vegetable stock",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Salmon Quinoa Bowl",
-        Ingredients = "salmon, quinoa, cucumber, lettuce, lemon juice",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Turkey Sandwich",
-        Ingredients = "bread, turkey, lettuce, tomato, cheese",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Caprese Pasta",
-        Ingredients = "pasta, tomato, mozzarella, basil, olive oil",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Egg Salad Bowl",
-        Ingredients = "eggs, lettuce, potato, cucumber, mayonnaise",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Sushi Bowl",
-        Ingredients = "rice, seaweed, cucumber, avocado, salmon",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Chicken Caesar Wrap",
-        Ingredients = "tortilla, chicken, lettuce, parmesan, caesar dressing",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Veggie Noodle Soup",
-        Ingredients = "noodles, carrot, cabbage, mushrooms, vegetable stock",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Falafel Bowl",
-        Ingredients = "falafel, rice, cucumber, lettuce, yogurt sauce",
-        Category = "Lunch"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Mushroom Risotto",
-        Ingredients = "rice, mushrooms, onion, parmesan, vegetable stock",
-        Category = "Lunch"
-    },
-
-    // Dinner
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Chicken Stir Fry",
-        Ingredients = "chicken, soy sauce, broccoli, rice",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Beef Bulgogi Bowl",
-        Ingredients = "beef, rice, soy sauce, sesame oil, onion",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Shrimp Garlic Noodles",
-        Ingredients = "shrimp, noodles, garlic, butter, soy sauce",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Vegetable Curry",
-        Ingredients = "potato, carrot, cauliflower, coconut milk, curry powder",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Baked Salmon",
-        Ingredients = "salmon, potato, green beans, lemon juice, olive oil",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Tofu Teriyaki Bowl",
-        Ingredients = "tofu, rice, broccoli, teriyaki sauce, sesame oil",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Spaghetti Bolognese",
-        Ingredients = "spaghetti, minced beef, tomato sauce, onion, garlic",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Black Bean Tacos",
-        Ingredients = "tortilla, black beans, lettuce, tomato, cheese",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Chicken Fajitas",
-        Ingredients = "chicken, tortilla, bell pepper, onion, salsa",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Beef Stew",
-        Ingredients = "beef, potato, carrot, onion, beef stock",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Eggplant Parmesan",
-        Ingredients = "eggplant, tomato sauce, mozzarella, parmesan, basil",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Grilled Chicken Salad",
-        Ingredients = "chicken, lettuce, cucumber, tomato, olive oil",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Sweet Potato Curry",
-        Ingredients = "sweet potato, chickpeas, coconut milk, spinach, curry powder",
-        Category = "Dinner"
-    },
-    new Recipe
-    {
-        UserId = 1,
-        Title = "Pesto Pasta",
-        Ingredients = "pasta, pesto, parmesan, cherry tomato, olive oil",
-        Category = "Dinner"
-    }
-};
+    var seedRecipes = SeedRecipes.GetSeedRecipes();
 
     var index = 0;
     foreach (var recipe in seedRecipes)
@@ -429,11 +130,37 @@ using (var scope = app.Services.CreateScope())
             existingRecipe.Ingredients = recipe.Ingredients;
             existingRecipe.Category = recipe.Category;
             existingRecipe.ImageUrl = ""; // Force refresh to use local images
+            existingRecipe.DietRestriction = ""; // Force refresh
+            existingRecipe.Allergens = ""; // Force refresh
             RecipeSeedEnricher.Enrich(existingRecipe, index, ownerPool);
         }
         index++;
     }
 
+    db.SaveChanges();
+
+    // Assign categories to recipes using the new join table
+    var allCategories = db.RecipeCategories.ToDictionary(c => c.Name, c => c.Id, StringComparer.OrdinalIgnoreCase);
+    
+    foreach (var recipe in db.Recipes)
+    {
+        if (!string.IsNullOrWhiteSpace(recipe.Category) && allCategories.TryGetValue(recipe.Category, out var categoryId))
+        {
+            // Check if assignment already exists
+            var existingAssignment = db.RecipeCategoryAssignments
+                .FirstOrDefault(rca => rca.RecipeId == recipe.Id && rca.RecipeCategoryId == categoryId);
+            
+            if (existingAssignment == null)
+            {
+                db.RecipeCategoryAssignments.Add(new RecipeCategoryAssignment
+                {
+                    RecipeId = recipe.Id,
+                    RecipeCategoryId = categoryId
+                });
+            }
+        }
+    }
+    
     db.SaveChanges();
 
     var currentMonday = WeekDateHelper.CurrentMonday();
@@ -482,18 +209,51 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
     }
 
-    if (!db.RecipeCategories.Any())
+    var categorySeedList = new[]
     {
-        db.RecipeCategories.AddRange(
-            new RecipeCategory { Name = "Tacos", Emoji = "🌮", ColorKey = "amber", SortOrder = 0 },
-            new RecipeCategory { Name = "Bowls", Emoji = "🥗", ColorKey = "green", SortOrder = 1 },
-            new RecipeCategory { Name = "Veggie", Emoji = "🥦", ColorKey = "lime", SortOrder = 2 },
-            new RecipeCategory { Name = "Breakfast", Emoji = "🍳", ColorKey = "yellow", SortOrder = 3 },
-            new RecipeCategory { Name = "Dessert", Emoji = "🍰", ColorKey = "pink", SortOrder = 4 },
-            new RecipeCategory { Name = "Thai", Emoji = "🍜", ColorKey = "red", SortOrder = 5 },
-            new RecipeCategory { Name = "Grilled", Emoji = "🥩", ColorKey = "stone", SortOrder = 6 });
-        db.SaveChanges();
+        new RecipeCategory { Name = "Tacos", Emoji = "🌮", ColorKey = "amber", SortOrder = 0 },
+        new RecipeCategory { Name = "Bowls", Emoji = "🥗", ColorKey = "green", SortOrder = 1 },
+        new RecipeCategory { Name = "Veggie", Emoji = "🥦", ColorKey = "lime", SortOrder = 2 },
+        new RecipeCategory { Name = "Breakfast", Emoji = "🍳", ColorKey = "yellow", SortOrder = 3 },
+        new RecipeCategory { Name = "Dessert", Emoji = "🍰", ColorKey = "pink", SortOrder = 4 },
+        new RecipeCategory { Name = "Thai", Emoji = "🍜", ColorKey = "red", SortOrder = 5 },
+        new RecipeCategory { Name = "Grilled", Emoji = "🥩", ColorKey = "stone", SortOrder = 6 },
+        new RecipeCategory { Name = "Pasta", Emoji = "🍝", ColorKey = "orange", SortOrder = 7 },
+        new RecipeCategory { Name = "Soup", Emoji = "🍲", ColorKey = "blue", SortOrder = 8 },
+        new RecipeCategory { Name = "Salad", Emoji = "🥬", ColorKey = "emerald", SortOrder = 9 },
+        new RecipeCategory { Name = "Sandwich", Emoji = "🥪", ColorKey = "brown", SortOrder = 10 },
+        new RecipeCategory { Name = "Curry", Emoji = "🍛", ColorKey = "purple", SortOrder = 11 },
+        new RecipeCategory { Name = "Seafood", Emoji = "🦐", ColorKey = "cyan", SortOrder = 12 },
+        new RecipeCategory { Name = "Mexican", Emoji = "🇲🇽", ColorKey = "rose", SortOrder = 13 },
+        new RecipeCategory { Name = "Italian", Emoji = "🇮🇹", ColorKey = "violet", SortOrder = 14 },
+        new RecipeCategory { Name = "Asian", Emoji = "🥡", ColorKey = "indigo", SortOrder = 15 },
+        new RecipeCategory { Name = "Mediterranean", Emoji = "🫒", ColorKey = "teal", SortOrder = 16 },
+        new RecipeCategory { Name = "Comfort Food", Emoji = "🍲", ColorKey = "warm", SortOrder = 17 },
+        new RecipeCategory { Name = "Quick & Easy", Emoji = "⚡", ColorKey = "sky", SortOrder = 18 },
+        new RecipeCategory { Name = "Healthy", Emoji = "💚", ColorKey = "mint", SortOrder = 19 },
+        new RecipeCategory { Name = "Kids Friendly", Emoji = "👶", ColorKey = "baby", SortOrder = 20 }
+    };
+
+    var existingCategoryNames = db.RecipeCategories.Select(c => c.Name).ToHashSet();
+
+    foreach (var category in categorySeedList)
+    {
+        if (!existingCategoryNames.Contains(category.Name))
+        {
+            db.RecipeCategories.Add(category);
+        }
+        else
+        {
+            var existing = db.RecipeCategories.FirstOrDefault(c => c.Name == category.Name);
+            if (existing != null)
+            {
+                existing.Emoji = category.Emoji;
+                existing.ColorKey = category.ColorKey;
+                existing.SortOrder = category.SortOrder;
+            }
+        }
     }
+    db.SaveChanges();
 }
 
 // ---------- Vision chat client (for receipt image parsing) ----------
@@ -887,7 +647,7 @@ app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest req, Kernel 
             $"no pork/alcohol for halal). Invent ONE brand-new recipe" +
             (string.IsNullOrWhiteSpace(req.Craving) ? "." : $" involving: {req.Craving}.") +
             " Respond with ONLY a JSON object, no prose, no markdown fences, in the form: " +
-            "{\"title\":\"...\",\"category\":\"Breakfast|Lunch|Dinner|Snack\"," +
+            "{\"title\":\"...\",\"category\":\"Breakfast|Tacos|Bowls|Veggie|Dessert|Thai|Grilled|Pasta|Soup|Salad|Sandwich|Curry|Seafood|Mexican|Italian|Asian|Mediterranean|Comfort Food|Quick & Easy|Healthy|Kids Friendly\"," +
             "\"ingredients\":\"comma, separated, list\",\"instructions\":\"numbered steps as one string\"," +
             "\"dietRestriction\":\"none|vegetarian|vegan|gluten-free|dairy-free|nut-free|low-carb|paleo|low-sodium|sugar-free|whole30|mediterranean|pescatarian\"," +
             "\"allergens\":\"comma, separated, allergens, or, empty, string\"," +
@@ -951,6 +711,27 @@ app.MapPost("/api/recipes", async (SaveRecipeRequest req, AppDbContext db) =>
     db.Recipes.Add(recipe);
     await db.SaveChangesAsync();
 
+    // Handle category assignments
+    if (req.CategoryIds != null && req.CategoryIds.Length > 0)
+    {
+        foreach (var categoryIdStr in req.CategoryIds)
+        {
+            if (int.TryParse(categoryIdStr, out var categoryId))
+            {
+                var categoryExists = await db.RecipeCategories.AnyAsync(c => c.Id == categoryId);
+                if (categoryExists)
+                {
+                    db.RecipeCategoryAssignments.Add(new RecipeCategoryAssignment
+                    {
+                        RecipeId = recipe.Id,
+                        RecipeCategoryId = categoryId
+                    });
+                }
+            }
+        }
+        await db.SaveChangesAsync();
+    }
+
     return Results.Ok(new { recipe.Id, recipe.Title, recipe.Category, recipe.ImageUrl });
 });
 
@@ -977,7 +758,29 @@ app.MapGet("/api/dashboard/recent-recipes/{userId:int}", async (int userId, AppD
         .Select(r => new { r.Id, r.Title, r.Category, r.Ingredients, r.ImageUrl, r.OwnerName, r.DietRestriction })
         .ToListAsync();
 
-    return Results.Ok(recentRecipes);
+    // Load category assignments for each recipe
+    var recipeIds = recentRecipes.Select(r => r.Id).ToList();
+    var categoryAssignments = await db.RecipeCategoryAssignments
+        .Where(rca => recipeIds.Contains(rca.RecipeId))
+        .Include(rca => rca.RecipeCategory)
+        .ToListAsync();
+
+    var result = recentRecipes.Select(r => new
+    {
+        r.Id,
+        r.Title,
+        r.Category,
+        r.Ingredients,
+        r.ImageUrl,
+        r.OwnerName,
+        r.DietRestriction,
+        Categories = categoryAssignments
+            .Where(ca => ca.RecipeId == r.Id)
+            .Select(ca => new { ca.RecipeCategory.Id, ca.RecipeCategory.Name, ca.RecipeCategory.Emoji, ca.RecipeCategory.ColorKey })
+            .ToList()
+    }).ToList();
+
+    return Results.Ok(result);
 });
 
 app.MapGet("/api/dashboard/weekly-summary/{userId:int}", async (int userId, AppDbContext db) =>
@@ -1006,8 +809,7 @@ app.MapGet("/api/dashboard/weekly-summary/{userId:int}", async (int userId, AppD
 app.MapGet("/api/dashboard/categories", async (AppDbContext db) =>
 {
     var categories = await db.RecipeCategories
-        .OrderBy(c => c.SortOrder)
-        .ThenBy(c => c.Id)
+        .OrderBy(c => c.Name)
         .Select(c => new { c.Id, c.Name, c.Emoji, c.ColorKey })
         .ToListAsync();
 
@@ -1410,4 +1212,4 @@ record DetectedObject(string Label, double Confidence, int YMin, int XMin, int Y
 record DetectionResult(List<DetectedObject> Objects, string Summary);
 record GenerateRecipeRequest(string? Craving);
 record GeneratedRecipe(string Title, string Category, string Ingredients, string Instructions, string DietRestriction, string Allergens, string ImageUrl);
-record SaveRecipeRequest(string Title, string Ingredients, string? Category, string? ImageUrl, string? DietRestriction, string? Allergens);
+record SaveRecipeRequest(string Title, string Ingredients, string? Category, string? ImageUrl, string? DietRestriction, string? Allergens, string[]? CategoryIds);

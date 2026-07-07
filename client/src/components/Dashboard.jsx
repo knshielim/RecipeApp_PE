@@ -234,42 +234,7 @@ export default function Dashboard({ username }) {
               </BarChart>
             </ResponsiveContainer>
           </div>
-        )}
-
-        {/* Top Recipe Categories */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="section-title">Top Recipe Categories</h2>
-            <button type="button" className="text-brand p-1 rounded-full hover:bg-brand-light transition-colors">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </div>
-          <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-2 scrollbar-thin">
-            {categories.map((cat) => (
-              <button
-                key={cat.id ?? cat.name}
-                type="button"
-                onClick={() => setActiveCategory(activeCategory === cat.name ? null : cat.name)}
-                className="flex flex-col items-center gap-2 shrink-0 group"
-              >
-                <div
-                  className={`w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full bg-gradient-to-br ${getCategoryGradient(cat.colorKey)} flex items-center justify-center text-2xl sm:text-3xl border-2 transition-all ${
-                    activeCategory === cat.name
-                      ? 'border-brand shadow-md scale-105'
-                      : 'border-brand/30 group-hover:border-brand/60'
-                  }`}
-                >
-                  {cat.emoji}
-                </div>
-                <span className={`text-xs font-semibold ${activeCategory === cat.name ? 'text-brand' : 'text-slate-600'}`}>
-                  {cat.name}
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
+ )}
           </>
         )}
 

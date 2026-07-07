@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<RecipeCategory> RecipeCategories => Set<RecipeCategory>();
     public DbSet<FavoriteRecipe> FavoriteRecipes => Set<FavoriteRecipe>();
+    public DbSet<RecipeCategoryAssignment> RecipeCategoryAssignments => Set<RecipeCategoryAssignment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -43,6 +44,24 @@ public class AppDbContext : DbContext
             entity.Property(c => c.Name).IsRequired();
             entity.Property(c => c.Emoji).HasDefaultValue("🍽️");
             entity.Property(c => c.ColorKey).HasDefaultValue("amber");
+        });
+
+        modelBuilder.Entity<RecipeCategoryAssignment>(entity =>
+        {
+            entity.HasKey(rca => rca.Id);
+
+            entity.HasIndex(rca => new { rca.RecipeId, rca.RecipeCategoryId })
+                .IsUnique();
+
+            entity.HasOne(rca => rca.Recipe)
+                .WithMany(r => r.CategoryAssignments)
+                .HasForeignKey(rca => rca.RecipeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(rca => rca.RecipeCategory)
+                .WithMany()
+                .HasForeignKey(rca => rca.RecipeCategoryId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

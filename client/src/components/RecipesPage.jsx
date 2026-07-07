@@ -12,6 +12,7 @@ import RecipeCard from "./RecipeCard";
 import { canManageRecipe } from "../utils/recipePermissions";
 import { useUserProfile } from "../context/UserProfileContext";
 import { DIET_OPTIONS } from "../utils/dietLabels";
+import { getCategoryGradient } from "../utils/recipeCategoryColors";
 
 const API = "http://localhost:5237";
 
@@ -21,12 +22,13 @@ const emptyForm = {
   ingredients: "",
   steps: "",
   category: "",
+  categoryIds: [],
   dietRestriction: "none",
   allergens: "",
   imageUrl: "",
 };
 
-const FALLBACK_CATEGORIES = ["Breakfast", "Lunch", "Dinner", "Snack"];
+const FALLBACK_CATEGORIES = ["Asian", "Bowls", "Breakfast", "Comfort Food", "Curry", "Dessert", "Grilled", "Healthy", "Italian", "Kids Friendly", "Mediterranean", "Mexican", "Pasta", "Quick & Easy", "Salad", "Sandwich", "Seafood", "Soup", "Thai", "Tacos", "Veggie"];
 
 function RecipesPage({ username, isAdmin = false }) {
   const { displayName } = useUserProfile();
@@ -35,7 +37,7 @@ function RecipesPage({ username, isAdmin = false }) {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
+  const [activeCategory, setActiveCategory] = useState(null);
   const [error, setError] = useState("");
   const [favoriteIds, setFavoriteIds] = useState(new Set());
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
@@ -50,7 +52,7 @@ function RecipesPage({ username, isAdmin = false }) {
       if (showFavoritesOnly && username) {
         data = await getFavoriteRecipes(username);
       } else {
-        data = await getRecipes(search, category);
+        data = await getRecipes(search, activeCategory || "");
       }
 
       setRecipes(data);
@@ -72,10 +74,10 @@ function RecipesPage({ username, isAdmin = false }) {
       const res = await fetch(`${API}/api/dashboard/categories`);
       if (res.ok) {
         const data = await res.json();
-        setCategories(data.map((c) => c.name).filter(Boolean));
+        setCategories(data.map((c) => c.name).filter(Boolean).sort());
       }
     } catch {
-      setCategories(FALLBACK_CATEGORIES);
+      setCategories(FALLBACK_CATEGORIES.sort());
     }
   }
 
@@ -85,7 +87,7 @@ function RecipesPage({ username, isAdmin = false }) {
 
   useEffect(() => {
     loadRecipes();
-  }, [showFavoritesOnly]);
+  }, [showFavoritesOnly, activeCategory]);
 
   async function toggleFavorite(recipeId) {
     if (!username) {
@@ -208,7 +210,7 @@ function RecipesPage({ username, isAdmin = false }) {
 
   async function clearFilters() {
     setSearch("");
-    setCategory("");
+    setActiveCategory(null);
     setShowFavoritesOnly(false);
     setLoading(true);
     try {
@@ -226,10 +228,7 @@ function RecipesPage({ username, isAdmin = false }) {
     }
   }
 
-  const categoryOptions =
-    categories.length > 0 ? categories : FALLBACK_CATEGORIES;
-
-  const hasActiveFilters = search.trim() || category || showFavoritesOnly;
+  const hasActiveFilters = search.trim() || activeCategory || showFavoritesOnly;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -269,19 +268,6 @@ function RecipesPage({ username, isAdmin = false }) {
             />
           </div>
 
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="input-field sm:w-44"
-          >
-            <option value="">All categories</option>
-            {categoryOptions.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-
           <button type="submit" className="btn-primary text-sm sm:px-6">
             Search
           </button>
@@ -315,6 +301,76 @@ function RecipesPage({ username, isAdmin = false }) {
           </span>
         </div>
       </div>
+
+      {/* Top Recipe Categories */}
+      <section>
+        <h2 className="section-title mb-4">Top Recipe Categories</h2>
+        <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-2 scrollbar-thin">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
+              className="flex flex-col items-center gap-2 shrink-0 group"
+            >
+              <div
+                className={`w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full bg-gradient-to-br ${getCategoryGradient(
+                  cat === "Tacos" ? "amber" :
+                  cat === "Bowls" ? "green" :
+                  cat === "Veggie" ? "lime" :
+                  cat === "Breakfast" ? "yellow" :
+                  cat === "Dessert" ? "pink" :
+                  cat === "Thai" ? "red" :
+                  cat === "Grilled" ? "stone" :
+                  cat === "Pasta" ? "orange" :
+                  cat === "Soup" ? "blue" :
+                  cat === "Salad" ? "emerald" :
+                  cat === "Sandwich" ? "brown" :
+                  cat === "Curry" ? "purple" :
+                  cat === "Seafood" ? "cyan" :
+                  cat === "Mexican" ? "rose" :
+                  cat === "Italian" ? "violet" :
+                  cat === "Asian" ? "indigo" :
+                  cat === "Mediterranean" ? "teal" :
+                  cat === "Comfort Food" ? "warm" :
+                  cat === "Quick & Easy" ? "sky" :
+                  cat === "Healthy" ? "mint" :
+                  "baby"
+                )} flex items-center justify-center text-2xl sm:text-3xl border-2 transition-all ${
+                  activeCategory === cat
+                    ? 'border-brand shadow-md scale-105'
+                    : 'border-brand/30 group-hover:border-brand/60'
+                }`}
+              >
+                {cat === "Tacos" ? "🌮" :
+                 cat === "Bowls" ? "🥗" :
+                 cat === "Veggie" ? "🥦" :
+                 cat === "Breakfast" ? "🍳" :
+                 cat === "Dessert" ? "🍰" :
+                 cat === "Thai" ? "🍜" :
+                 cat === "Grilled" ? "🥩" :
+                 cat === "Pasta" ? "🍝" :
+                 cat === "Soup" ? "🍲" :
+                 cat === "Salad" ? "🥬" :
+                 cat === "Sandwich" ? "🥪" :
+                 cat === "Curry" ? "🍛" :
+                 cat === "Seafood" ? "🦐" :
+                 cat === "Mexican" ? "🇲🇽" :
+                 cat === "Italian" ? "🇮🇹" :
+                 cat === "Asian" ? "🥡" :
+                 cat === "Mediterranean" ? "🫒" :
+                 cat === "Comfort Food" ? "🍲" :
+                 cat === "Quick & Easy" ? "⚡" :
+                 cat === "Healthy" ? "💚" :
+                 cat === "Kids Friendly" ? "👶" : "🍽️"}
+              </div>
+              <span className={`text-xs font-semibold ${activeCategory === cat ? 'text-brand' : 'text-slate-600'}`}>
+                {cat}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {error && !showModal && (
         <p className="text-red-600 text-sm font-medium bg-red-50 border border-red-100 rounded-xl px-4 py-3">

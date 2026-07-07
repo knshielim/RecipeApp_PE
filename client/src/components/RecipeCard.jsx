@@ -21,9 +21,16 @@ export default function RecipeCard({ recipe, favoriteButton, detailPath }) {
           />
         ) : (
           <div
-            className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center text-4xl`}
+            className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}
           >
-            🍽️
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-16 h-16 text-white/70">
+              <ellipse cx="12" cy="14" rx="8" ry="4" />
+              <path d="M4 14c0 2.2 3.6 4 8 4s8-1.8 8-4" />
+              <path d="M4 10c0 2.2 3.6 4 8 4s8-1.8 8-4" />
+              <path d="M4 6c0 2.2 3.6 4 8 4s8-1.8 8-4" />
+              <path d="M12 10v8" />
+              <path d="M8 12l4-2 4 2" />
+            </svg>
           </div>
         )}
       </div>

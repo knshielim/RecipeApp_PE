@@ -813,7 +813,7 @@ function AdminPage({ token, username, onLogout }) {
                         value={recipeForm.category}
                         onChange={handleRecipeInput}
                         className={inputClass}
-                        placeholder="e.g., Lunch"
+                        placeholder="e.g., Bowls"
                         list="admin-recipe-categories"
                         required
                       />

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -21,6 +21,29 @@ import AppLayout from "./components/layout/AppLayout";
 import { UserProfileProvider } from "./context/UserProfileContext";
 import "./index.css";
 
+const AUTH_STORAGE_KEY = "nomly_auth";
+
+function getStoredAuth() {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setStoredAuth(auth) {
+  try {
+    if (auth) {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
+    } else {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+  } catch {
+    // ignore quota / private mode errors
+  }
+}
+
 function LoginWrapper({ onLoginSuccess }) {
   const navigate = useNavigate();
   return (
@@ -40,6 +63,19 @@ function RegisterWrapper() {
   );
 }
 
+function ProtectedRoute({ children, allowedRoles, auth }) {
+  if (!auth) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(auth.role)) {
+    const homePath = auth.role === "Admin" ? "/admin" : "/";
+    return <Navigate to={homePath} replace />;
+  }
+
+  return children;
+}
+
 function UserAppShell({ auth, onLogout }) {
   const isAdmin = auth.role === "Admin";
   return (
@@ -52,7 +88,11 @@ function UserAppShell({ auth, onLogout }) {
 }
 
 function App() {
-  const [auth, setAuth] = useState(null);
+  const [auth, setAuth] = useState(() => getStoredAuth());
+
+  useEffect(() => {
+    setStoredAuth(auth);
+  }, [auth]);
 
   function handleLoginSuccess(token, username, role) {
     setAuth({ token, username, role });
@@ -86,18 +126,18 @@ function App() {
   return (
     <Router>
       <Routes>
-        {isAdmin && (
-          <Route
-            path="/admin"
-            element={
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={["Admin"]} auth={auth}>
               <AdminPage
                 token={auth.token}
                 username={auth.username}
                 onLogout={handleLogout}
               />
-            }
-          />
-        )}
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           element={<UserAppShell auth={auth} onLogout={handleLogout} />}
@@ -105,20 +145,64 @@ function App() {
           <Route
             path="/"
             element={
-              <Dashboard
-                token={auth.token}
-                username={auth.username}
-                role={auth.role}
-                onLogout={handleLogout}
-              />
+              <ProtectedRoute allowedRoles={["User", "Admin"]} auth={auth}>
+                <Dashboard
+                  token={auth.token}
+                  username={auth.username}
+                  role={auth.role}
+                  onLogout={handleLogout}
+                />
+              </ProtectedRoute>
             }
           />
-          <Route path="/meal-planner" element={<MealPlanner />} />
-          <Route path="/pantry" element={<PantryPage />} />
-          <Route path="/recipes" element={<RecipesPage username={auth.username} isAdmin={isAdmin} />} />
-          <Route path="/recipes/:id" element={<RecipeDetail username={auth.username} isAdmin={isAdmin} />} />
-          <Route path="/profile" element={<Profile token={auth.token} username={auth.username} />} />
-          <Route path="/ai-assistant" element={<AIAssistantChat token={auth.token} />} />
+          <Route
+            path="/meal-planner"
+            element={
+              <ProtectedRoute allowedRoles={["User", "Admin"]} auth={auth}>
+                <MealPlanner />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/pantry"
+            element={
+              <ProtectedRoute allowedRoles={["User", "Admin"]} auth={auth}>
+                <PantryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recipes"
+            element={
+              <ProtectedRoute allowedRoles={["User", "Admin"]} auth={auth}>
+                <RecipesPage username={auth.username} isAdmin={isAdmin} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recipes/:id"
+            element={
+              <ProtectedRoute allowedRoles={["User", "Admin"]} auth={auth}>
+                <RecipeDetail username={auth.username} isAdmin={isAdmin} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute allowedRoles={["User", "Admin"]} auth={auth}>
+                <Profile token={auth.token} username={auth.username} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ai-assistant"
+            element={
+              <ProtectedRoute allowedRoles={["User", "Admin"]} auth={auth}>
+                <AIAssistantChat token={auth.token} />
+              </ProtectedRoute>
+            }
+          />
         </Route>
 
         <Route path="*" element={<Navigate to={homePath} replace />} />

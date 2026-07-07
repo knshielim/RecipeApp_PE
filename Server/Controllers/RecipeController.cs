@@ -40,21 +40,39 @@ public class RecipeController : ControllerBase
 
         var recipes = await query
             .OrderBy(r => r.Title)
-            .Select(r => new RecipeDTO
-            {
-                Id = r.Id,
-                UserId = r.UserId,
-                OwnerName = r.OwnerName,
-                DietRestriction = r.DietRestriction,
-                Title = r.Title,
-                Ingredients = r.Ingredients,
-                Steps = r.Steps,
-                Category = r.Category,
-                ImageUrl = r.ImageUrl,
-            })
             .ToListAsync();
 
-        return Ok(recipes);
+        // Load category assignments
+        var recipeIds = recipes.Select(r => r.Id).ToList();
+        var categoryAssignments = await _context.RecipeCategoryAssignments
+            .Where(rca => recipeIds.Contains(rca.RecipeId))
+            .Include(rca => rca.RecipeCategory)
+            .ToListAsync();
+
+        var result = recipes.Select(r => new RecipeDTO
+        {
+            Id = r.Id,
+            UserId = r.UserId,
+            OwnerName = r.OwnerName,
+            DietRestriction = r.DietRestriction,
+            Title = r.Title,
+            Ingredients = r.Ingredients,
+            Steps = r.Steps,
+            Category = r.Category,
+            ImageUrl = r.ImageUrl,
+            Categories = categoryAssignments
+                .Where(ca => ca.RecipeId == r.Id)
+                .Select(ca => new CategoryDTO
+                {
+                    Id = ca.RecipeCategory.Id,
+                    Name = ca.RecipeCategory.Name,
+                    Emoji = ca.RecipeCategory.Emoji,
+                    ColorKey = ca.RecipeCategory.ColorKey
+                })
+                .ToList()
+        }).ToList();
+
+        return Ok(result);
     }
 
     // GET: /api/recipe/1
@@ -68,6 +86,11 @@ public class RecipeController : ControllerBase
             return NotFound(new { message = "Recipe not found." });
         }
 
+        var categoryAssignments = await _context.RecipeCategoryAssignments
+            .Where(rca => rca.RecipeId == id)
+            .Include(rca => rca.RecipeCategory)
+            .ToListAsync();
+
         return Ok(new RecipeDTO
         {
             Id = recipe.Id,
@@ -79,6 +102,13 @@ public class RecipeController : ControllerBase
             Steps = recipe.Steps,
             Category = recipe.Category,
             ImageUrl = recipe.ImageUrl,
+            Categories = categoryAssignments.Select(ca => new CategoryDTO
+            {
+                Id = ca.RecipeCategory.Id,
+                Name = ca.RecipeCategory.Name,
+                Emoji = ca.RecipeCategory.Emoji,
+                ColorKey = ca.RecipeCategory.ColorKey
+            }).ToList()
         });
     }
 
@@ -101,6 +131,29 @@ public class RecipeController : ControllerBase
         _context.Recipes.Add(recipe);
         await _context.SaveChangesAsync();
 
+        // Handle category assignments
+        if (dto.CategoryIds != null && dto.CategoryIds.Count > 0)
+        {
+            foreach (var categoryId in dto.CategoryIds)
+            {
+                var categoryExists = await _context.RecipeCategories.AnyAsync(c => c.Id == categoryId);
+                if (categoryExists)
+                {
+                    _context.RecipeCategoryAssignments.Add(new RecipeCategoryAssignment
+                    {
+                        RecipeId = recipe.Id,
+                        RecipeCategoryId = categoryId
+                    });
+                }
+            }
+            await _context.SaveChangesAsync();
+        }
+
+        var categoryAssignments = await _context.RecipeCategoryAssignments
+            .Where(rca => rca.RecipeId == recipe.Id)
+            .Include(rca => rca.RecipeCategory)
+            .ToListAsync();
+
         var recipeDto = new RecipeDTO
         {
             Id = recipe.Id,
@@ -111,7 +164,14 @@ public class RecipeController : ControllerBase
             Ingredients = recipe.Ingredients,
             Steps = recipe.Steps,
             Category = recipe.Category,
-            ImageUrl = recipe.ImageUrl
+            ImageUrl = recipe.ImageUrl,
+            Categories = categoryAssignments.Select(ca => new CategoryDTO
+            {
+                Id = ca.RecipeCategory.Id,
+                Name = ca.RecipeCategory.Name,
+                Emoji = ca.RecipeCategory.Emoji,
+                ColorKey = ca.RecipeCategory.ColorKey
+            }).ToList()
         };
 
         return CreatedAtAction(nameof(GetRecipe), new { id = recipe.Id }, recipeDto);
@@ -134,6 +194,31 @@ public class RecipeController : ControllerBase
         recipe.Category = dto.Category;
         recipe.DietRestriction = string.IsNullOrWhiteSpace(dto.DietRestriction) ? recipe.DietRestriction : dto.DietRestriction.Trim();
         recipe.ImageUrl = dto.ImageUrl;
+
+        await _context.SaveChangesAsync();
+
+        // Handle category assignments - remove existing and add new
+        var existingAssignments = await _context.RecipeCategoryAssignments
+            .Where(rca => rca.RecipeId == id)
+            .ToListAsync();
+        
+        _context.RecipeCategoryAssignments.RemoveRange(existingAssignments);
+
+        if (dto.CategoryIds != null && dto.CategoryIds.Count > 0)
+        {
+            foreach (var categoryId in dto.CategoryIds)
+            {
+                var categoryExists = await _context.RecipeCategories.AnyAsync(c => c.Id == categoryId);
+                if (categoryExists)
+                {
+                    _context.RecipeCategoryAssignments.Add(new RecipeCategoryAssignment
+                    {
+                        RecipeId = id,
+                        RecipeCategoryId = categoryId
+                    });
+                }
+            }
+        }
 
         await _context.SaveChangesAsync();
 

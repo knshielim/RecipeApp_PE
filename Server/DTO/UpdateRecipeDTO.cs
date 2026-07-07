@@ -9,4 +9,5 @@ public class UpdateRecipeDTO
     public string DietRestriction { get; set; } = string.Empty;
     public string Allergens { get; set; } = "";
     public string ImageUrl { get; set; } = string.Empty;
+    public List<int> CategoryIds { get; set; } = new();
 }
