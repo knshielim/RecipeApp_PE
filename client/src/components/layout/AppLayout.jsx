@@ -31,6 +31,7 @@ export default function AppLayout({ children, username, onLogout }) {
               {[
                 { to: "/", label: "Dashboard", end: true },
                 { to: "/pantry", label: "Pantry" },
+                { to: "/recipes", label: "Recipes" },
                 { to: "/meal-planner", label: "Events" },
                 { to: "/ai-assistant", label: "AI" },
               ].map((item) => (

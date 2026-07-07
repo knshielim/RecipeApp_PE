@@ -31,6 +31,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    to: "/recipes",
+    label: "Recipes",
+    icon: () => (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-5 h-5">
+        <path d="M4 5h16v14H4z" strokeLinejoin="round" />
+        <path d="M8 9h8M8 13h8M8 17h5" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
     to: "/ai-assistant",
     label: "AI Assistant",
     icon: () => (
@@ -51,10 +61,9 @@ export default function Sidebar() {
             to={item.to}
             end={item.end}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl w-full transition-all duration-150 ${
-                isActive
-                  ? "bg-brand text-white"
-                  : "text-brand hover:bg-brand-light"
+              `flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl w-full transition-all duration-150 ${isActive
+                ? "bg-brand text-white"
+                : "text-brand hover:bg-brand-light"
               }`
             }
           >

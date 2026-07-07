@@ -1,3 +1,5 @@
+namespace Server.Models;
+
 public class MealPlan
 {
     public int Id { get; set; }

@@ -6,6 +6,7 @@ const SEARCH_PLACEHOLDERS = {
   "/": "Search recipes by name, category, or ingredients…",
   "/meal-planner": "Search planned meals by recipe name…",
   "/pantry": "Search pantry items by name or category…",
+  "/recipes": "Search recipes by name, category, or ingredients…",
   "/profile": "Search favourite meals…",
 };
 

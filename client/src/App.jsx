@@ -7,6 +7,8 @@ import AdminPage from "./components/AdminPage";
 import Profile from "./components/Profile";
 import AIAssistantChat from "./components/AIAssistantChat";
 import PantryPage from "./components/PantryPage";
+import RecipesPage from "./components/RecipesPage";
+import RecipeDetail from "./components/RecipeDetail";
 import MealPlanner from "./components/MealPlanner";
 import AppLayout from "./components/layout/AppLayout";
 import { UserProfileProvider } from "./context/UserProfileContext";
@@ -15,9 +17,9 @@ import "./index.css";
 function LoginWrapper({ onLoginSuccess }) {
   const navigate = useNavigate();
   return (
-    <LoginPage 
-      onLoginSuccess={onLoginSuccess} 
-      onGoToRegister={() => navigate("/register")} 
+    <LoginPage
+      onLoginSuccess={onLoginSuccess}
+      onGoToRegister={() => navigate("/register")}
     />
   );
 }
@@ -25,8 +27,8 @@ function LoginWrapper({ onLoginSuccess }) {
 function RegisterWrapper() {
   const navigate = useNavigate();
   return (
-    <RegistrationPage 
-      onGoToLogin={() => navigate("/login")} 
+    <RegistrationPage
+      onGoToLogin={() => navigate("/login")}
     />
   );
 }
@@ -46,13 +48,13 @@ function App() {
     return (
       <Router>
         <Routes>
-          <Route 
-            path="/login" 
-            element={<LoginWrapper onLoginSuccess={handleLoginSuccess} />} 
+          <Route
+            path="/login"
+            element={<LoginWrapper onLoginSuccess={handleLoginSuccess} />}
           />
-          <Route 
-            path="/register" 
-            element={<RegisterWrapper />} 
+          <Route
+            path="/register"
+            element={<RegisterWrapper />}
           />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
@@ -75,19 +77,21 @@ function App() {
       <UserProfileProvider token={auth.token} username={auth.username}>
         <AppLayout username={auth.username} onLogout={handleLogout}>
           <Routes>
-            <Route 
-              path="/" 
+            <Route
+              path="/"
               element={
-                <Dashboard 
-                  token={auth.token} 
-                  username={auth.username} 
-                  role={auth.role} 
-                  onLogout={handleLogout} 
+                <Dashboard
+                  token={auth.token}
+                  username={auth.username}
+                  role={auth.role}
+                  onLogout={handleLogout}
                 />
-              } 
+              }
             />
             <Route path="/meal-planner" element={<MealPlanner />} />
             <Route path="/pantry" element={<PantryPage />} />
+            <Route path="/recipes" element={<RecipesPage />} />
+            <Route path="/recipes/:id" element={<RecipeDetail />} />
             <Route path="/profile" element={<Profile token={auth.token} username={auth.username} />} />
             <Route path="/ai-assistant" element={<AIAssistantChat token={auth.token} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
