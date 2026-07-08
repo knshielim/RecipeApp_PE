@@ -27,23 +27,28 @@ const SITE_FEATURES = [
   },
   {
     icon: '📅',
-    title: 'Events',
+    title: 'Meal Planner',
     desc: 'Plan breakfast, lunch, and dinner for each day of the week, auto-generate a full plan from your recipes, and create a grocery shopping list.',
   },
   {
-    icon: '💬',
+    icon: '�',
+    title: 'Recipes',
+    desc: 'Create and store custom recipes with images, add detailed ingredients and cooking steps, and organize recipes by categories.',
+  },
+  {
+    icon: '�💬',
     title: 'AI Assistant',
     desc: 'Ask for meal ideas, summarize your recipes, generate a weekly plan, check what you can cook from your pantry, and set dietary preferences.',
   },
   {
-    icon: '👤',
-    title: 'Profile',
-    desc: 'Update your account details and view your favourite saved meals.',
-  },
-  {
     icon: '🧺',
     title: 'My Pantry',
-    desc: 'Track ingredients, scan grocery receipts or photos, and manage expiry dates.',
+    desc: 'Track ingredients, scan grocery receipts or photos to add items automatically, manage expiry dates, and get meal suggestions based on available ingredients.',
+  },
+  {
+    icon: '👤',
+    title: 'Profile',
+    desc: 'Update your account details, set dietary goals and restrictions, view favorite saved meals, and track your cooking history.',
   },
 ];
 

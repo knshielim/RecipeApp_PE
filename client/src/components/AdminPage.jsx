@@ -39,7 +39,7 @@ function TopBar({ username, role, onLogout, onUserDashboard }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-brand">Nomly</h1>
+            <img src="/NomlyLogo-Green.png" alt="Nomly" className="h-25" />
             <span className="text-xs font-semibold bg-brand-light text-brand px-3 py-1 rounded-full">
               {role}
             </span>
@@ -68,7 +68,7 @@ function TopBar({ username, role, onLogout, onUserDashboard }) {
 }
 
 const EMPTY_EDIT_FORM = {
-  fullName: "", email: "", phoneNumber: "", dateOfBirth: "", gender: "", newPassword: ""
+  fullName: "", email: "", phoneNumber: "", dateOfBirth: "", gender: ""
 };
 
 const EMPTY_CATEGORY_FORM = { name: "", emoji: "🍽️", colorKey: "amber", sortOrder: 0 };
@@ -117,6 +117,7 @@ function AdminPage({ token, username, onLogout }) {
   const [editUser, setEditUser] = useState(null); // username being edited, or null
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editUserError, setEditUserError] = useState("");
 
   // Top Recipe Categories state
   const [editCategoryId, setEditCategoryId] = useState(null); // null | "new" | id
@@ -124,6 +125,7 @@ function AdminPage({ token, username, onLogout }) {
   const [savingCategory, setSavingCategory] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [editCategoryError, setEditCategoryError] = useState("");
 
   // Popular Recipe state
   const [editRecipeId, setEditRecipeId] = useState(null); // null | "new" | id
@@ -132,6 +134,7 @@ function AdminPage({ token, username, onLogout }) {
   const [recipeSearch, setRecipeSearch] = useState("");
   const [recipeFilter, setRecipeFilter] = useState("all");
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [editRecipeError, setEditRecipeError] = useState("");
 
   const authHeaders = useCallback(
     () => ({ Authorization: `Bearer ${token}` }),
@@ -240,6 +243,7 @@ function AdminPage({ token, username, onLogout }) {
   const startEdit = (u) => {
     setError("");
     setNotice("");
+    setEditUserError("");
     setEditUser(u.username);
     setEditForm({
       fullName: u.fullName || "",
@@ -247,13 +251,13 @@ function AdminPage({ token, username, onLogout }) {
       phoneNumber: u.phoneNumber || "",
       dateOfBirth: u.dateOfBirth || "",
       gender: u.gender || "",
-      newPassword: "",
     });
   };
 
   const cancelEdit = () => {
     setEditUser(null);
     setEditForm(EMPTY_EDIT_FORM);
+    setEditUserError("");
   };
 
   const handleEditInput = (e) => {
@@ -263,27 +267,25 @@ function AdminPage({ token, username, onLogout }) {
 
   const saveEdit = async (e) => {
     e.preventDefault();
-    if (!editForm.fullName.trim()) return setError("Full name is required.");
+    if (!editForm.fullName.trim()) return setEditUserError("Full name is required.");
     if (!editForm.email.trim() || !editForm.email.includes("@"))
-      return setError("A valid email is required.");
-    if (editForm.newPassword && editForm.newPassword.length < 6)
-      return setError("New password must be at least 6 characters.");
+      return setEditUserError("A valid email is required.");
 
     setSavingEdit(true);
-    await handleAction(
-      fetch(`${API}/api/admin/users/${encodeURIComponent(editUser)}/profile`, {
+    setEditUserError("");
+    try {
+      const res = await fetch(`${API}/api/admin/users/${encodeURIComponent(editUser)}/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({
-          ...editForm,
-          newPassword: editForm.newPassword || null,
-        }),
-      }),
-      () => {
-        loadUsers();
-        cancelEdit();
-      }
-    );
+        body: JSON.stringify(editForm),
+      });
+      const data = await readAdminResponse(res, "Failed to update user.");
+      setNotice(data.message || "User updated successfully.");
+      loadUsers();
+      cancelEdit();
+    } catch (err) {
+      setEditUserError(formatFetchError(err));
+    }
     setSavingEdit(false);
   };
 
@@ -291,6 +293,7 @@ function AdminPage({ token, username, onLogout }) {
   const startNewCategory = () => {
     setError("");
     setNotice("");
+    setEditCategoryError("");
     setEditCategoryId("new");
     setCategoryForm(EMPTY_CATEGORY_FORM);
   };
@@ -298,6 +301,7 @@ function AdminPage({ token, username, onLogout }) {
   const startEditCategory = (c) => {
     setError("");
     setNotice("");
+    setEditCategoryError("");
     setEditCategoryId(c.id);
     setCategoryForm({
       name: c.name || "",
@@ -310,6 +314,7 @@ function AdminPage({ token, username, onLogout }) {
   const cancelEditCategory = () => {
     setEditCategoryId(null);
     setCategoryForm(EMPTY_CATEGORY_FORM);
+    setEditCategoryError("");
   };
 
   const handleCategoryInput = (e) => {
@@ -319,12 +324,13 @@ function AdminPage({ token, username, onLogout }) {
 
   const saveCategory = async (e) => {
     e.preventDefault();
-    if (!categoryForm.name.trim()) return setError("Category name is required.");
+    if (!categoryForm.name.trim()) return setEditCategoryError("Category name is required.");
 
     setSavingCategory(true);
+    setEditCategoryError("");
     const isNew = editCategoryId === "new";
-    await handleAction(
-      fetch(
+    try {
+      const res = await fetch(
         isNew
           ? `${API}/api/admin/categories`
           : `${API}/api/admin/categories/${editCategoryId}`,
@@ -333,12 +339,14 @@ function AdminPage({ token, username, onLogout }) {
           headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify(categoryForm),
         }
-      ),
-      () => {
-        loadCategories();
-        cancelEditCategory();
-      }
-    );
+      );
+      const data = await readAdminResponse(res, "Failed to save category.");
+      setNotice(data.message || "Category saved successfully.");
+      loadCategories();
+      cancelEditCategory();
+    } catch (err) {
+      setEditCategoryError(formatFetchError(err));
+    }
     setSavingCategory(false);
   };
 
@@ -356,6 +364,7 @@ function AdminPage({ token, username, onLogout }) {
   const startNewRecipe = () => {
     setError("");
     setNotice("");
+    setEditRecipeError("");
     setEditRecipeId("new");
     setRecipeForm(EMPTY_RECIPE_FORM);
   };
@@ -363,6 +372,7 @@ function AdminPage({ token, username, onLogout }) {
   const startEditRecipe = (r) => {
     setError("");
     setNotice("");
+    setEditRecipeError("");
     setEditRecipeId(r.id);
     setRecipeForm({
       title: r.title || "",
@@ -378,6 +388,7 @@ function AdminPage({ token, username, onLogout }) {
   const cancelEditRecipe = () => {
     setEditRecipeId(null);
     setRecipeForm(EMPTY_RECIPE_FORM);
+    setEditRecipeError("");
   };
 
   const handleRecipeInput = (e) => {
@@ -416,7 +427,7 @@ function AdminPage({ token, username, onLogout }) {
       const data = await readAdminResponse(res, "Failed to upload image.");
       setRecipeForm((prev) => ({ ...prev, imageUrl: `${API}${data.url}` }));
     } catch (err) {
-      setError(formatFetchError(err));
+      setEditRecipeError(formatFetchError(err));
     } finally {
       setUploadingImage(false);
     }
@@ -424,17 +435,17 @@ function AdminPage({ token, username, onLogout }) {
 
   const saveRecipe = async (e) => {
     e.preventDefault();
-    if (!recipeForm.title.trim()) return setError("Recipe title is required.");
-    if (!recipeForm.categoryIds || recipeForm.categoryIds.length === 0) return setError("Select at least one category.");
-    if (!recipeForm.ingredients.trim()) return setError("Ingredients are required.");
-    if (!recipeForm.steps.trim()) return setError("Cooking instructions are required.");
+    if (!recipeForm.title.trim()) return setEditRecipeError("Recipe title is required.");
+    if (!recipeForm.categoryIds || recipeForm.categoryIds.length === 0) return setEditRecipeError("Select at least one category.");
+    if (!recipeForm.ingredients.trim()) return setEditRecipeError("Ingredients are required.");
+    if (!recipeForm.steps.trim()) return setEditRecipeError("Cooking instructions are required.");
 
     // Validate imageUrl if provided
     if (recipeForm.imageUrl && 
         !recipeForm.imageUrl.startsWith("http://") && 
         !recipeForm.imageUrl.startsWith("https://") && 
         !recipeForm.imageUrl.startsWith("/")) {
-      return setError("Image URL must be a valid URL or app upload path.");
+      return setEditRecipeError("Image URL must be a valid URL or app upload path.");
     }
 
     // Set the primary category from the first selected category
@@ -447,9 +458,10 @@ function AdminPage({ token, username, onLogout }) {
     };
 
     setSavingRecipe(true);
+    setEditRecipeError("");
     const isNew = editRecipeId === "new";
-    await handleAction(
-      fetch(
+    try {
+      const res = await fetch(
         isNew
           ? `${API}/api/admin/recipes`
           : `${API}/api/admin/recipes/${editRecipeId}`,
@@ -458,12 +470,14 @@ function AdminPage({ token, username, onLogout }) {
           headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify(payload),
         }
-      ),
-      () => {
-        loadRecipes();
-        cancelEditRecipe();
-      }
-    );
+      );
+      const data = await readAdminResponse(res, "Failed to save recipe.");
+      setNotice(data.message || "Recipe saved successfully.");
+      loadRecipes();
+      cancelEditRecipe();
+    } catch (err) {
+      setEditRecipeError(formatFetchError(err));
+    }
     setSavingRecipe(false);
   };
 
@@ -628,20 +642,12 @@ function AdminPage({ token, username, onLogout }) {
                     <option value="Other">Other</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Reset Password</label>
-                  <input
-                    type="password"
-                    name="newPassword"
-                    value={editForm.newPassword}
-                    onChange={handleEditInput}
-                    className={inputClass}
-                    autoComplete="new-password"
-                    placeholder="Leave blank to keep current"
-                  />
-                  <p className="text-xs text-slate-400 mt-1">Optional — at least 6 characters if set.</p>
-                </div>
               </div>
+              {editUserError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3 whitespace-pre-line">
+                  {editUserError}
+                </p>
+              )}
               <div className="flex gap-3 pt-2">
                 <button
                   type="submit"
@@ -891,6 +897,11 @@ function AdminPage({ token, username, onLogout }) {
                       {categoryForm.emoji}
                     </div>
                   </div>
+                  {editCategoryError && (
+                    <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3 whitespace-pre-line">
+                      {editCategoryError}
+                    </p>
+                  )}
                   <div className="flex gap-3">
                     <button
                       type="submit"
@@ -1101,6 +1112,11 @@ function AdminPage({ token, username, onLogout }) {
                       />
                     </div>
                   </div>
+                  {editRecipeError && (
+                    <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3 whitespace-pre-line">
+                      {editRecipeError}
+                    </p>
+                  )}
                   <div className="flex gap-3">
                     <button
                       type="submit"
