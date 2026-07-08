@@ -401,62 +401,24 @@ function RecipesPage({ username, isAdmin = false }) {
       <section>
         <h2 className="section-title mb-4">Top Recipe Categories</h2>
         <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-2 scrollbar-thin">
-          {categories.map((cat) => (
+          {categoryList.map((cat) => (
             <button
-              key={cat}
+              key={cat.id}
               type="button"
-              onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
+              onClick={() => setActiveCategory(activeCategory === cat.name ? null : cat.name)}
               className="flex flex-col items-center gap-2 shrink-0 group"
             >
               <div
-                className={`w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full bg-gradient-to-br ${getCategoryGradient(
-                  cat === "Veggie" ? "lime" :
-                    cat === "Breakfast" ? "yellow" :
-                      cat === "Dessert" ? "pink" :
-                        cat === "Thai" ? "red" :
-                          cat === "Grilled" ? "stone" :
-                            cat === "Pasta" ? "orange" :
-                              cat === "Soup" ? "blue" :
-                                cat === "Salad" ? "emerald" :
-                                  cat === "Sandwich" ? "brown" :
-                                    cat === "Curry" ? "purple" :
-                                      cat === "Seafood" ? "cyan" :
-                                        cat === "Mexican" ? "rose" :
-                                          cat === "Italian" ? "violet" :
-                                            cat === "Asian" ? "indigo" :
-                                              cat === "Mediterranean" ? "teal" :
-                                                cat === "Comfort Food" ? "warm" :
-                                                  cat === "Quick & Easy" ? "sky" :
-                                                    cat === "Healthy" ? "mint" :
-                                                      "baby"
-                )} flex items-center justify-center text-2xl sm:text-3xl border-2 transition-all ${activeCategory === cat
+                className={`w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full bg-gradient-to-br ${getCategoryGradient(cat.colorKey)} flex items-center justify-center text-2xl sm:text-3xl border-2 transition-all ${activeCategory === cat.name
                   ? "border-brand shadow-md scale-105"
                   : "border-brand/30 group-hover:border-brand/60"
                   }`}
               >
-                {cat === "Veggie" ? "🥦" :
-                  cat === "Breakfast" ? "🍳" :
-                    cat === "Dessert" ? "🍰" :
-                      cat === "Thai" ? "🍜" :
-                        cat === "Grilled" ? "🥩" :
-                          cat === "Pasta" ? "🍝" :
-                            cat === "Soup" ? "🍲" :
-                              cat === "Salad" ? "🥬" :
-                                cat === "Sandwich" ? "🥪" :
-                                  cat === "Curry" ? "🍛" :
-                                    cat === "Seafood" ? "🦐" :
-                                      cat === "Mexican" ? "🇲🇽" :
-                                        cat === "Italian" ? "🇮🇹" :
-                                          cat === "Asian" ? "🥡" :
-                                            cat === "Mediterranean" ? "🫒" :
-                                              cat === "Comfort Food" ? "🍲" :
-                                                cat === "Quick & Easy" ? "⚡" :
-                                                  cat === "Healthy" ? "💚" :
-                                                    cat === "Kids Friendly" ? "👶" : "🍽️"}
+                {cat.emoji}
               </div>
 
-              <span className={`text-xs font-semibold ${activeCategory === cat ? "text-brand" : "text-slate-600"}`}>
-                {cat}
+              <span className={`text-xs font-semibold ${activeCategory === cat.name ? "text-brand" : "text-slate-600"}`}>
+                {cat.name}
               </span>
             </button>
           ))}
@@ -495,7 +457,7 @@ function RecipesPage({ username, isAdmin = false }) {
               const canManage = canManageRecipe(recipe, username, isAdmin, displayName);
 
               return (
-                <div key={recipe.id}>
+                <div key={recipe.id} className="flex flex-col">
                   <RecipeCard
                     recipe={recipe}
                     detailPath={`/recipes/${recipe.id}`}
@@ -517,7 +479,7 @@ function RecipesPage({ username, isAdmin = false }) {
                     }
                   />
                   {canManage && (
-                    <div className="flex gap-3 mt-2 ml-2">
+                    <div className="flex gap-3 mt-3 px-1">
                       <button
                         type="button"
                         onClick={() => openEditModal(recipe)}

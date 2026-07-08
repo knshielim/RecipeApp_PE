@@ -997,14 +997,18 @@ function AdminPage({ token, username, onLogout }) {
                 filteredRecipes.map((r) => (
                   <div key={r.id} className="flex items-start gap-4 p-4">
                     <div className="w-12 h-12 shrink-0 rounded-xl overflow-hidden bg-gradient-to-br from-orange-100 to-amber-200 flex items-center justify-center">
-                      {r.imageUrl ? (
+                      {r.imageUrl && r.imageUrl.trim() && r.imageUrl !== "" && r.imageUrl !== "null" ? (
                         <img 
                           src={r.imageUrl} 
                           alt={r.title} 
                           className="w-full h-full object-cover" 
                         />
                       ) : (
-                        <span className="text-xl">🍽️</span>
+                        <img 
+                          src="/DefaultRecipeImage.png" 
+                          alt={r.title} 
+                          className="w-full h-full object-cover" 
+                        />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">

@@ -121,16 +121,18 @@ function RecipeDetail({ username, isAdmin = false }) {
       {/* Hero */}
       <div className="soft-card overflow-hidden">
         <div className="relative h-56 sm:h-72">
-          {recipe.imageUrl ? (
+          {recipe.imageUrl && recipe.imageUrl.trim() && recipe.imageUrl !== "" && recipe.imageUrl !== "null" ? (
             <img
               src={recipe.imageUrl}
               alt={recipe.title}
               className="w-full h-full object-cover"
             />
           ) : (
-            <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center text-6xl`}>
-              🍽️
-            </div>
+            <img
+              src="/DefaultRecipeImage.png"
+              alt={recipe.title}
+              className="w-full h-full object-cover"
+            />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-6 text-white">

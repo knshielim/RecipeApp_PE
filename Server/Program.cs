@@ -896,7 +896,7 @@ app.MapGet("/api/dashboard/recent-recipes/{userId:int}", async (int userId, AppD
     var recentRecipes = await db.Recipes
         .Where(r => r.UserId == userId)
         .OrderByDescending(r => r.Id)
-        .Take(6)
+        .Take(8)
         .Select(r => new
         {
             r.Id,
