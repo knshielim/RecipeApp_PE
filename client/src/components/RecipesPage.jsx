@@ -122,14 +122,9 @@ function RecipesPage({ username, isAdmin = false }) {
     }
 
     setCategories([...FALLBACK_CATEGORIES].sort());
-    setCategoryList(
-      FALLBACK_CATEGORIES.map((name, i) => ({
-        id: i,
-        name,
-        emoji: "",
-        colorKey: "",
-      }))
-    );
+    setCategoryList([]);
+    setError("Could not load recipe categories. Please refresh the page and try again.");
+
   }
 
   useEffect(() => {
@@ -184,12 +179,33 @@ function RecipesPage({ username, isAdmin = false }) {
   }
 
   function validateForm() {
-    if (!form.title.trim()) return "Title is required.";
-    if (!form.ingredients.trim()) return "Ingredients are required.";
-    if (!form.steps.trim()) return "Steps are required.";
-    if (!form.categoryIds || form.categoryIds.length === 0) return "Select at least one category.";
-    if (form.imageUrl.trim() && !form.imageUrl.startsWith("http")) {
-      return "Image URL must start with http or https.";
+    if (categoryList.length === 0) {
+      return "Recipe categories are not loaded yet. Please refresh the page.";
+    }
+
+    const title = form.title.trim();
+    const ingredients = form.ingredients.trim();
+    const steps = form.steps.trim();
+    const imageUrl = form.imageUrl.trim();
+
+    if (!title) return "Title is required.";
+    if (title.length < 2) return "Title must be at least 2 characters.";
+    if (title.length > 100) return "Title cannot exceed 100 characters.";
+
+    if (!ingredients) return "Ingredients are required.";
+    if (!steps) return "Steps are required.";
+
+    if (!form.categoryIds || form.categoryIds.length === 0) {
+      return "Select at least one category.";
+    }
+
+    if (
+      imageUrl &&
+      !imageUrl.startsWith("http://") &&
+      !imageUrl.startsWith("https://") &&
+      !imageUrl.startsWith("/")
+    ) {
+      return "Image URL must be a valid URL or app upload path.";
     }
 
     return "";
@@ -259,34 +275,33 @@ function RecipesPage({ username, isAdmin = false }) {
     setError("");
 
     const validationError = validateForm();
-
     if (validationError) {
       setError(validationError);
       return;
     }
 
-    // "category" (singular, string) is kept for backward compatibility with
-    // older parts of the app; it's derived from the first selected category.
     const primaryCategoryName =
       categoryList.find((c) => c.id === form.categoryIds[0])?.name || "";
 
+    const recipePayload = {
+      title: form.title.trim(),
+      ingredients: form.ingredients.trim(),
+      steps: form.steps.trim(),
+      category: primaryCategoryName,
+      categoryIds: form.categoryIds,
+      dietRestriction: form.dietRestriction || "none",
+      allergens: form.allergens.trim(),
+      imageUrl: form.imageUrl.trim(),
+    };
+
     try {
       if (editingId) {
-        await updateRecipe(editingId, {
-          title: form.title,
-          ingredients: form.ingredients,
-          steps: form.steps,
-          category: primaryCategoryName,
-          categoryIds: form.categoryIds,
-          dietRestriction: form.dietRestriction,
-          allergens: form.allergens,
-          imageUrl: form.imageUrl,
-        });
+        await updateRecipe(editingId, recipePayload);
       } else {
         await createRecipe({
-          ...form,
-          category: primaryCategoryName,
-          ownerName: displayName || username || "",
+          userId: form.userId || 1,
+          ownerName: displayName || username || "User",
+          ...recipePayload,
         });
       }
 
@@ -294,7 +309,7 @@ function RecipesPage({ username, isAdmin = false }) {
       await loadRecipes();
     } catch (err) {
       console.error(err);
-      setError(formatFetchError(err) || "Failed to save recipe.");
+      setError(formatFetchError(err) || err.message || "Failed to save recipe.");
     }
   }
 
@@ -358,11 +373,10 @@ function RecipesPage({ username, isAdmin = false }) {
           <button
             type="button"
             onClick={() => setShowFavoritesOnly((prev) => !prev)}
-            className={`text-sm font-semibold px-4 py-2 rounded-full border transition-colors ${
-              showFavoritesOnly
-                ? "bg-red-50 text-red-600 border-red-200"
-                : "bg-white text-slate-600 border-slate-200 hover:border-brand/40 hover:text-brand"
-            }`}
+            className={`text-sm font-semibold px-4 py-2 rounded-full border transition-colors ${showFavoritesOnly
+              ? "bg-red-50 text-red-600 border-red-200"
+              : "bg-white text-slate-600 border-slate-200 hover:border-brand/40 hover:text-brand"
+              }`}
           >
             {showFavoritesOnly ? "★ Favourites only" : "☆ Show favourites"}
           </button>
@@ -397,49 +411,48 @@ function RecipesPage({ username, isAdmin = false }) {
               <div
                 className={`w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full bg-gradient-to-br ${getCategoryGradient(
                   cat === "Veggie" ? "lime" :
-                  cat === "Breakfast" ? "yellow" :
-                  cat === "Dessert" ? "pink" :
-                  cat === "Thai" ? "red" :
-                  cat === "Grilled" ? "stone" :
-                  cat === "Pasta" ? "orange" :
-                  cat === "Soup" ? "blue" :
-                  cat === "Salad" ? "emerald" :
-                  cat === "Sandwich" ? "brown" :
-                  cat === "Curry" ? "purple" :
-                  cat === "Seafood" ? "cyan" :
-                  cat === "Mexican" ? "rose" :
-                  cat === "Italian" ? "violet" :
-                  cat === "Asian" ? "indigo" :
-                  cat === "Mediterranean" ? "teal" :
-                  cat === "Comfort Food" ? "warm" :
-                  cat === "Quick & Easy" ? "sky" :
-                  cat === "Healthy" ? "mint" :
-                  "baby"
-                )} flex items-center justify-center text-2xl sm:text-3xl border-2 transition-all ${
-                  activeCategory === cat
-                    ? "border-brand shadow-md scale-105"
-                    : "border-brand/30 group-hover:border-brand/60"
-                }`}
+                    cat === "Breakfast" ? "yellow" :
+                      cat === "Dessert" ? "pink" :
+                        cat === "Thai" ? "red" :
+                          cat === "Grilled" ? "stone" :
+                            cat === "Pasta" ? "orange" :
+                              cat === "Soup" ? "blue" :
+                                cat === "Salad" ? "emerald" :
+                                  cat === "Sandwich" ? "brown" :
+                                    cat === "Curry" ? "purple" :
+                                      cat === "Seafood" ? "cyan" :
+                                        cat === "Mexican" ? "rose" :
+                                          cat === "Italian" ? "violet" :
+                                            cat === "Asian" ? "indigo" :
+                                              cat === "Mediterranean" ? "teal" :
+                                                cat === "Comfort Food" ? "warm" :
+                                                  cat === "Quick & Easy" ? "sky" :
+                                                    cat === "Healthy" ? "mint" :
+                                                      "baby"
+                )} flex items-center justify-center text-2xl sm:text-3xl border-2 transition-all ${activeCategory === cat
+                  ? "border-brand shadow-md scale-105"
+                  : "border-brand/30 group-hover:border-brand/60"
+                  }`}
               >
                 {cat === "Veggie" ? "🥦" :
-                 cat === "Breakfast" ? "🍳" :
-                 cat === "Dessert" ? "🍰" :
-                 cat === "Thai" ? "🍜" :
-                 cat === "Grilled" ? "🥩" :
-                 cat === "Pasta" ? "🍝" :
-                 cat === "Soup" ? "🍲" :
-                 cat === "Salad" ? "🥬" :
-                 cat === "Sandwich" ? "🥪" :
-                 cat === "Curry" ? "🍛" :
-                 cat === "Seafood" ? "🦐" :
-                 cat === "Mexican" ? "🇲🇽" :
-                 cat === "Italian" ? "🇮🇹" :
-                 cat === "Asian" ? "🥡" :
-                 cat === "Mediterranean" ? "🫒" :
-                 cat === "Comfort Food" ? "🍲" :
-                 cat === "Quick & Easy" ? "⚡" :
-                 cat === "Healthy" ? "💚" :
-                 cat === "Kids Friendly" ? "👶" : "🍽️"}
+                  cat === "Breakfast" ? "🍳" :
+                    cat === "Dessert" ? "🍰" :
+                      cat === "Thai" ? "🍜" :
+                        cat === "Grilled" ? "🥩" :
+                          cat === "Pasta" ? "🍝" :
+                            cat === "Soup" ? "🍲" :
+                              cat === "Salad" ? "🥬" :
+                                cat === "Sandwich" ? "🥪" :
+                                  cat === "Curry" ? "🍛" :
+                                    cat === "Seafood" ? "🦐" :
+                                      cat === "Mexican" ? "🇲🇽" :
+                                        cat === "Italian" ? "🇮🇹" :
+                                          cat === "Asian" ? "🥡" :
+                                            cat === "Mediterranean" ? "🫒" :
+                                              cat === "Comfort Food" ? "🍲" :
+                                                cat === "Quick & Easy" ? "⚡" :
+                                                  cat === "Healthy" ? "💚" :
+                                                    cat === "Kids Friendly" ? "👶" : "🍽️"}
               </div>
 
               <span className={`text-xs font-semibold ${activeCategory === cat ? "text-brand" : "text-slate-600"}`}>
@@ -597,27 +610,33 @@ function RecipesPage({ username, isAdmin = false }) {
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   Categories * <span className="font-normal text-slate-400">(select one or more)</span>
                 </label>
-                <div className="flex flex-wrap gap-2">
-                  {categoryList.map((cat) => {
-                    const selected = form.categoryIds.includes(cat.id);
+                {categoryList.length === 0 ? (
+                  <p className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-xl p-3">
+                    Recipe categories could not be loaded. Please refresh the page before creating a recipe.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {categoryList.map((cat) => {
+                      const selected = form.categoryIds.includes(cat.id);
 
-                    return (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => toggleCategoryId(cat.id)}
-                        aria-pressed={selected}
-                        className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-colors ${
-                          selected
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => toggleCategoryId(cat.id)}
+                          aria-pressed={selected}
+                          className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-colors ${selected
                             ? "bg-brand text-white border-brand"
                             : "bg-white text-slate-600 border-slate-200 hover:border-brand/40 hover:text-brand"
-                        }`}
-                      >
-                        {cat.emoji ? `${cat.emoji} ` : ""}{cat.name}
-                      </button>
-                    );
-                  })}
-                </div>
+                            }`}
+                        >
+                          {cat.emoji ? `${cat.emoji} ` : ""}
+                          {cat.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div>

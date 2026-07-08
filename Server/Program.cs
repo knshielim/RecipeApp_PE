@@ -78,7 +78,6 @@ builder.Services.AddControllers()
         };
     });
 builder.Services.AddSingleton<TokenService>();
-builder.Services.AddScoped<RecipeService>();
 // UserStore needs to be scoped to access DbContext
 builder.Services.AddScoped<UserStore>();
 builder.Services.AddScoped<IMealPlanSuggester, MealPlanSuggester>();
