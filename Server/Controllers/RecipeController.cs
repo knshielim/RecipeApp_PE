@@ -9,6 +9,11 @@ namespace Server.Controllers;
 [Route("api/[controller]")]
 public class RecipeController : ControllerBase
 {
+    private const long MaxImageBytes = 5 * 1024 * 1024;
+
+    private static readonly string[] AllowedImageExtensions =
+        { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
+
     private readonly AppDbContext _context;
 
     public RecipeController(AppDbContext context)
@@ -234,6 +239,53 @@ public class RecipeController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new { message = $"Recipe '{recipe.Title}' deleted." });
+    }
+
+    // POST: /api/recipe/upload-image (multipart/form-data, field name "image")
+    [HttpPost("upload-image")]
+    [RequestSizeLimit(MaxImageBytes)]
+    public async Task<IActionResult> UploadImage(
+        IFormFile? image,
+        [FromServices] IWebHostEnvironment env)
+    {
+        if (image == null || image.Length == 0)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "Please choose an image file to upload.");
+        }
+
+        if (image.Length > MaxImageBytes)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "Image must be 5 MB or smaller.");
+        }
+
+        var extension = Path.GetExtension(image.FileName).ToLowerInvariant();
+
+        if (!AllowedImageExtensions.Contains(extension) ||
+            !image.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "Only JPG, PNG, WebP, or GIF images are allowed.");
+        }
+
+        var webRoot = env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot");
+        var uploadDir = Path.Combine(webRoot, "uploads", "recipes");
+        Directory.CreateDirectory(uploadDir);
+
+        // Random file name: never trust user-supplied names on disk.
+        var fileName = $"{Guid.NewGuid():N}{extension}";
+        var filePath = Path.Combine(uploadDir, fileName);
+
+        await using (var stream = System.IO.File.Create(filePath))
+        {
+            await image.CopyToAsync(stream);
+        }
+
+        return Ok(new { url = $"/uploads/recipes/{fileName}" });
     }
 
     // GET: /api/recipe/favorites?username=alice
@@ -465,7 +517,7 @@ public class RecipeController : ControllerBase
         {
             StatusCode = statusCode,
             Message = message,
-            TraceId = HttpContext.TraceIdentifier
+            TraceId = HttpContext?.TraceIdentifier ?? ""
         });
     }
 }

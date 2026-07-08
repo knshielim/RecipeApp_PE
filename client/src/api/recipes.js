@@ -60,6 +60,19 @@ export async function updateRecipe(id, recipe) {
   }
 }
 
+export async function uploadRecipeImage(file) {
+  try {
+    const data = new FormData();
+    data.append("image", file);
+
+    const response = await axios.post(`${API_BASE_URL}/upload-image`, data);
+
+    return response.data; // { url: "/uploads/recipes/<name>.jpg" }
+  } catch (error) {
+    handleAxiosError(error, "Failed to upload image.");
+  }
+}
+
 export async function deleteRecipe(id) {
   try {
     const response = await axios.delete(`${API_BASE_URL}/${id}`);

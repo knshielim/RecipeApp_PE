@@ -4,6 +4,7 @@ import {
   createRecipe,
   updateRecipe,
   deleteRecipe,
+  uploadRecipeImage,
   getFavoriteRecipes,
   addFavoriteRecipe,
   removeFavoriteRecipe,
@@ -67,6 +68,7 @@ function RecipesPage({ username, isAdmin = false }) {
   const [favoriteIds, setFavoriteIds] = useState(new Set());
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadRecipes = useCallback(async (searchTerm = debouncedSearch) => {
@@ -221,6 +223,35 @@ function RecipesPage({ username, isAdmin = false }) {
     setEditingId(null);
     setForm(emptyForm);
     setError("");
+  }
+
+  async function handleImageFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Only image files can be uploaded.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image must be 5 MB or smaller.");
+      return;
+    }
+
+    setError("");
+    setUploadingImage(true);
+
+    try {
+      const { url } = await uploadRecipeImage(file);
+      setForm((prev) => ({ ...prev, imageUrl: `${API}${url}` }));
+    } catch (err) {
+      console.error(err);
+      setError(formatFetchError(err) || "Failed to upload image.");
+    } finally {
+      setUploadingImage(false);
+    }
   }
 
   async function handleSubmit(e) {
@@ -621,11 +652,46 @@ function RecipesPage({ username, isAdmin = false }) {
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  Image URL <span className="font-normal text-slate-400">(optional)</span>
+                  Recipe Image <span className="font-normal text-slate-400">(optional)</span>
                 </label>
+
+                {form.imageUrl ? (
+                  <div className="flex items-center gap-3 mb-2">
+                    <img
+                      src={form.imageUrl}
+                      alt="Recipe preview"
+                      className="w-20 h-20 rounded-xl object-cover border border-slate-200"
+                      onError={(e) => { e.target.style.opacity = 0.3; }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, imageUrl: "" }))}
+                      className="text-sm font-semibold text-red-500 hover:text-red-600"
+                    >
+                      Remove image
+                    </button>
+                  </div>
+                ) : (
+                  <label
+                    className={`flex items-center justify-center gap-2 w-full border-2 border-dashed border-slate-300 rounded-xl px-4 py-5 text-sm text-slate-500 cursor-pointer hover:border-brand hover:text-brand transition-colors mb-2 ${uploadingImage ? "opacity-50 pointer-events-none" : ""}`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-5 h-5">
+                      <path d="M12 16V4m0 0l-4 4m4-4l4 4" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" strokeLinecap="round" />
+                    </svg>
+                    {uploadingImage ? "Uploading..." : "Upload an image (JPG, PNG, WebP, GIF — max 5 MB)"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      onChange={handleImageFile}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+
                 <input
                   name="imageUrl"
-                  placeholder="https://..."
+                  placeholder="...or paste an image URL (https://...)"
                   value={form.imageUrl}
                   onChange={handleChange}
                   className="input-field w-full"

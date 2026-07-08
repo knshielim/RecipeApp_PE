@@ -114,6 +114,7 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors();
+app.UseStaticFiles(); // serves uploaded recipe images from wwwroot
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -900,16 +901,8 @@ app.MapPost("/api/recipe", async (SaveRecipeRequest? req, AppDbContext db, HttpC
 
     if (req.CategoryIds != null && req.CategoryIds.Length > 0)
     {
-        foreach (var categoryIdText in req.CategoryIds)
+        foreach (var categoryId in req.CategoryIds)
         {
-            if (!int.TryParse(categoryIdText, out var categoryId))
-            {
-                return ApiError(
-                    http,
-                    StatusCodes.Status400BadRequest,
-                    $"Invalid category ID: {categoryIdText}.");
-            }
-
             var categoryExists = await db.RecipeCategories.AnyAsync(c => c.Id == categoryId);
 
             if (categoryExists)
@@ -1692,4 +1685,4 @@ record DetectedObject(string Label, double Confidence, int YMin, int XMin, int Y
 record DetectionResult(List<DetectedObject> Objects, string Summary);
 record GenerateRecipeRequest(string? Craving);
 record GeneratedRecipe(string Title, string Category, string Ingredients, string Instructions, string DietRestriction, string Allergens, string ImageUrl);
-record SaveRecipeRequest(string Title, string Ingredients, string? Steps, string? Category, string? ImageUrl, string? OwnerName, string? DietRestriction, string? Allergens, string[]? CategoryIds);
+record SaveRecipeRequest(string Title, string Ingredients, string? Steps, string? Category, string? ImageUrl, string? OwnerName, string? DietRestriction, string? Allergens, int[]? CategoryIds);

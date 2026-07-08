@@ -75,6 +75,53 @@ export async function getGroceryList(userId, weekStart) {
   return handleResponse(res, "Could not load grocery list.");
 }
 
+export async function generateGroceryList(userId, weekStart) {
+  const params = buildWeekStartParam(weekStart);
+  const res = await fetch(`${API}/api/mealplans/${userId}/grocery-list/generate${params}`, {
+    method: "POST",
+  });
+
+  return handleResponse(res, "Failed to generate grocery list.");
+}
+
+export async function addGroceryItem(userId, weekStart, { name, quantity, unit }) {
+  const params = buildWeekStartParam(weekStart);
+  const res = await fetch(`${API}/api/mealplans/${userId}/grocery-list/items${params}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, quantity: quantity || 0, unit: unit || "" }),
+  });
+
+  return handleResponse(res, "Failed to add grocery item.");
+}
+
+export async function updateGroceryItem(userId, itemId, changes) {
+  const res = await fetch(`${API}/api/mealplans/${userId}/grocery-list/items/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(changes),
+  });
+
+  return handleResponse(res, "Failed to update grocery item.");
+}
+
+export async function deleteGroceryItem(userId, itemId) {
+  const res = await fetch(`${API}/api/mealplans/${userId}/grocery-list/items/${itemId}`, {
+    method: "DELETE",
+  });
+
+  return handleResponse(res, "Failed to delete grocery item.");
+}
+
+export async function uncheckAllGroceryItems(userId, weekStart) {
+  const params = buildWeekStartParam(weekStart);
+  const res = await fetch(`${API}/api/mealplans/${userId}/grocery-list/uncheck-all${params}`, {
+    method: "POST",
+  });
+
+  return handleResponse(res, "Failed to reset checked items.");
+}
+
 async function handleResponse(res, fallback = "Request failed.") {
   const data = await res.json().catch(() => null);
 

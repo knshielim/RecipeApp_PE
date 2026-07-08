@@ -42,6 +42,13 @@ public static class TestHelpers
 
     public static DateOnly CurrentWeek => WeekDateHelper.CurrentMonday();
 
+    // Controllers return StatusCode(...) => a plain ObjectResult carrying the code.
+    public static void AssertStatus(Microsoft.AspNetCore.Mvc.IActionResult result, int statusCode)
+    {
+        var objectResult = Xunit.Assert.IsAssignableFrom<Microsoft.AspNetCore.Mvc.ObjectResult>(result);
+        Xunit.Assert.Equal(statusCode, objectResult.StatusCode);
+    }
+
     public static MealPlan AddMealPlan(AppDbContext db, int userId, string day, string slot, int recipeId, DateOnly? week = null)
     {
         var plan = new MealPlan

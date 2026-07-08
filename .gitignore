@@ -17,3 +17,5 @@
 *.db
 *.db-shm
 *.db-wal
+# Uploaded recipe images (user content, not source)
+Server/wwwroot/uploads/

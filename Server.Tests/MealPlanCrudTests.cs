@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Server.DTO;
 using Server.Models;
 using Xunit;
+using static Server.Tests.TestHelpers;
 
 namespace Server.Tests;
 
@@ -35,7 +37,7 @@ public class MealPlanCrudTests
 
         var result = await controller.Create(Request(1, "Someday", "dinner", recipe.Id));
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        AssertStatus(result, StatusCodes.Status400BadRequest);
         Assert.Empty(db.MealPlans);
     }
 
@@ -48,7 +50,7 @@ public class MealPlanCrudTests
 
         var result = await controller.Create(Request(1, "Monday", "brunch", recipe.Id));
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        AssertStatus(result, StatusCodes.Status400BadRequest);
     }
 
     [Fact]
@@ -60,7 +62,7 @@ public class MealPlanCrudTests
 
         var result = await controller.Create(Request(1, "Monday", "dinner", otherUsersRecipe.Id));
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        AssertStatus(result, StatusCodes.Status400BadRequest);
     }
 
     [Fact]
@@ -73,7 +75,7 @@ public class MealPlanCrudTests
         await controller.Create(Request(1, "Monday", "dinner", recipe.Id));
         var result = await controller.Create(Request(1, "Monday", "dinner", recipe.Id));
 
-        Assert.IsType<ConflictObjectResult>(result);
+        AssertStatus(result, StatusCodes.Status409Conflict);
         Assert.Single(db.MealPlans);
     }
 
@@ -123,7 +125,7 @@ public class MealPlanCrudTests
 
         var result = await controller.Update(tuesdayId, Request(1, "Monday", "dinner", recipe.Id));
 
-        Assert.IsType<ConflictObjectResult>(result);
+        AssertStatus(result, StatusCodes.Status409Conflict);
     }
 
     [Fact]
@@ -135,7 +137,7 @@ public class MealPlanCrudTests
 
         var result = await controller.Update(999, Request(1, "Monday", "dinner", recipe.Id));
 
-        Assert.IsType<NotFoundObjectResult>(result);
+        AssertStatus(result, StatusCodes.Status404NotFound);
     }
 
     [Fact]
@@ -161,7 +163,7 @@ public class MealPlanCrudTests
 
         var result = await controller.Delete(999);
 
-        Assert.IsType<NotFoundObjectResult>(result);
+        AssertStatus(result, StatusCodes.Status404NotFound);
     }
 
     [Fact]

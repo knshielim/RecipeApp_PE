@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Server.DTO;
@@ -206,79 +205,6 @@ public class MealPlanController : ControllerBase
         return Ok(new { message = "Meal plan entry deleted." });
     }
 
-    // GET api/mealplans/{userId}/grocery-list?weekStart=2026-07-07
-    [HttpGet("{userId:int}/grocery-list")]
-    public async Task<IActionResult> GetGroceryList(int userId, [FromQuery] string? weekStart = null)
-    {
-        if (userId <= 0)
-        {
-            return ErrorResponse(
-                StatusCodes.Status400BadRequest,
-                "User ID must be valid.");
-        }
-
-        var week = WeekDateHelper.ParseOrCurrent(weekStart);
-
-        var plannedRecipes = await _db.MealPlans
-            .Where(m => m.UserId == userId && m.WeekStartDate == week)
-            .Include(m => m.Recipe)
-            .Select(m => m.Recipe)
-            .ToListAsync();
-
-        var aggregated = new Dictionary<string, GroceryItem>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var recipe in plannedRecipes)
-        {
-            foreach (var raw in recipe.Ingredients.Split(','))
-            {
-                var text = raw.Trim();
-
-                if (text.Length == 0)
-                {
-                    continue;
-                }
-
-                var (name, quantity, unit) = ParseIngredient(text);
-                var key = $"{name.ToLowerInvariant()}|{unit.ToLowerInvariant()}";
-
-                if (aggregated.TryGetValue(key, out var existing))
-                {
-                    existing.Quantity += quantity;
-                    existing.Occurrences += 1;
-                }
-                else
-                {
-                    aggregated[key] = new GroceryItem
-                    {
-                        Name = name,
-                        Quantity = quantity,
-                        Unit = unit,
-                        Occurrences = 1
-                    };
-                }
-            }
-        }
-
-        var items = aggregated.Values
-            .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(i => new
-            {
-                name = i.Name,
-                quantity = i.Quantity,
-                unit = i.Unit,
-                occurrences = i.Occurrences,
-                hasUnit = !string.IsNullOrWhiteSpace(i.Unit)
-            })
-            .ToList();
-
-        return Ok(new
-        {
-            weekStartDate = week.ToString("yyyy-MM-dd"),
-            totalRecipes = plannedRecipes.Count,
-            items
-        });
-    }
-
     // POST api/mealplans/{userId}/auto-generate?weekStart=2026-07-07
     [HttpPost("{userId:int}/auto-generate")]
     public async Task<IActionResult> AutoGenerate(int userId, [FromQuery] string? weekStart = null)
@@ -476,40 +402,10 @@ public class MealPlanController : ControllerBase
         {
             StatusCode = statusCode,
             Message = message,
-            TraceId = HttpContext.TraceIdentifier
+            TraceId = HttpContext?.TraceIdentifier ?? ""
         });
     }
 
-    private static readonly Regex QuantityPattern = new(
-        @"^(?<qty>\d+(\.\d+)?)\s*(?<unit>g|kg|ml|l|cup|cups|tbsp|tsp|oz|lb|pieces?|cloves?|slices?)?\s+(?<name>.+)$",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private static (string Name, double Quantity, string Unit) ParseIngredient(string text)
-    {
-        var match = QuantityPattern.Match(text);
-
-        if (match.Success)
-        {
-            var name = match.Groups["name"].Value.Trim();
-            var qty = double.Parse(
-                match.Groups["qty"].Value,
-                System.Globalization.CultureInfo.InvariantCulture);
-
-            var unit = match.Groups["unit"].Value.Trim().ToLowerInvariant();
-
-            return (name, qty, unit);
-        }
-
-        return (text, 1, "");
-    }
-
-    private class GroceryItem
-    {
-        public string Name { get; set; } = "";
-        public double Quantity { get; set; }
-        public string Unit { get; set; } = "";
-        public int Occurrences { get; set; }
-    }
 }
 
 public record PlanEntryDTO(string Day, string MealSlot, int RecipeId);

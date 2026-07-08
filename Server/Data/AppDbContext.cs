@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<RecipeCategory> RecipeCategories => Set<RecipeCategory>();
     public DbSet<FavoriteRecipe> FavoriteRecipes => Set<FavoriteRecipe>();
     public DbSet<RecipeCategoryAssignment> RecipeCategoryAssignments => Set<RecipeCategoryAssignment>();
+    public DbSet<GroceryListItem> GroceryListItems => Set<GroceryListItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -44,6 +45,14 @@ public class AppDbContext : DbContext
             entity.Property(c => c.Name).IsRequired();
             entity.Property(c => c.Emoji).HasDefaultValue("🍽️");
             entity.Property(c => c.ColorKey).HasDefaultValue("amber");
+        });
+
+        modelBuilder.Entity<GroceryListItem>(entity =>
+        {
+            entity.HasKey(g => g.Id);
+            entity.Property(g => g.Name).IsRequired().HasMaxLength(120);
+            entity.Property(g => g.Unit).HasMaxLength(20);
+            entity.HasIndex(g => new { g.UserId, g.WeekStartDate });
         });
 
         modelBuilder.Entity<RecipeCategoryAssignment>(entity =>

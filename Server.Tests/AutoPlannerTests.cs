@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Server.Models;
 using Server.Services;
 using Xunit;
+using static Server.Tests.TestHelpers;
 
 namespace Server.Tests;
 
@@ -190,7 +192,7 @@ public class AutoGenerateEndpointTests
 
         var result = await controller.AutoGenerate(1);
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        AssertStatus(result, StatusCodes.Status400BadRequest);
     }
 
     [Fact]
@@ -204,7 +206,7 @@ public class AutoGenerateEndpointTests
 
         var result = await controller.AutoGenerate(1);
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        AssertStatus(result, StatusCodes.Status400BadRequest);
         Assert.Empty(db.MealPlans);
     }
 
