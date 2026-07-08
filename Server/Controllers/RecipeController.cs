@@ -298,7 +298,9 @@ public class RecipeController : ControllerBase
             await image.CopyToAsync(stream);
         }
 
-        return Ok(new { url = $"/uploads/recipes/{fileName}" });
+        var request = HttpContext.Request;
+        var baseUrl = $"{request.Scheme}://{request.Host}";
+        return Ok(new { url = $"{baseUrl}/uploads/recipes/{fileName}" });
     }
 
     // GET: /api/recipe/favorites?username=alice

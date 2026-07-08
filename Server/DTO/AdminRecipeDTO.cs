@@ -23,6 +23,5 @@ public class AdminRecipeDTO
     [StringLength(120, ErrorMessage = "Owner name cannot exceed 120 characters.")]
     public string OwnerName { get; set; } = "";
 
-    [Url(ErrorMessage = "Image URL must be a valid URL.")]
     public string? ImageUrl { get; set; }
 }

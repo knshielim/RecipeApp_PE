@@ -21,32 +21,32 @@ const MEAL_TIMES = {
 
 const SITE_FEATURES = [
   {
-    icon: '🏠',
+    icon: '/Icon-02.png',
     title: 'Dashboard',
     desc: 'Browse your saved recipes, filter by category, search by name or ingredients, and heart meals to save them as favourites.',
   },
   {
-    icon: '📅',
+    icon: '/Icon-03.png',
     title: 'Meal Planner',
     desc: 'Plan breakfast, lunch, and dinner for each day of the week, auto-generate a full plan from your recipes, and create a grocery shopping list.',
   },
   {
-    icon: '�',
+    icon: '/Icon-04.png',
     title: 'Recipes',
     desc: 'Create and store custom recipes with images, add detailed ingredients and cooking steps, and organize recipes by categories.',
   },
   {
-    icon: '�💬',
+    icon: '/Icon-05.png',
     title: 'AI Assistant',
     desc: 'Ask for meal ideas, summarize your recipes, generate a weekly plan, check what you can cook from your pantry, and set dietary preferences.',
   },
   {
-    icon: '🧺',
+    icon: '/Icon-06.png',
     title: 'My Pantry',
     desc: 'Track ingredients, scan grocery receipts or photos to add items automatically, manage expiry dates, and get meal suggestions based on available ingredients.',
   },
   {
-    icon: '👤',
+    icon: '/Icon-01.png',
     title: 'Profile',
     desc: 'Update your account details, set dietary goals and restrictions, view favorite saved meals, and track your cooking history.',
   },
@@ -371,7 +371,11 @@ export default function Dashboard({ username }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {SITE_FEATURES.map((feature) => (
                 <div key={feature.title} className="soft-card p-5">
-                  <span className="text-2xl">{feature.icon}</span>
+                  {feature.icon.startsWith('/') ? (
+                    <img src={feature.icon} alt={feature.title} className="w-10 h-10" />
+                  ) : (
+                    <span className="text-2xl">{feature.icon}</span>
+                  )}
                   <h3 className="font-bold text-slate-800 mt-3">{feature.title}</h3>
                   <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{feature.desc}</p>
                 </div>

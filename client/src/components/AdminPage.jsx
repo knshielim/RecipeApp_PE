@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { CATEGORY_COLOR_OPTIONS, getCategoryGradient } from "../utils/recipeCategoryColors";
+import { CATEGORY_COLOR_OPTIONS, getCategoryGradient, getCategoryGradientStyle } from "../utils/recipeCategoryColors";
 import { API_BASE, getApiErrorMessage, formatFetchError } from "../utils/apiError";
 
 const API = API_BASE;
@@ -425,7 +425,7 @@ function AdminPage({ token, username, onLogout }) {
       });
 
       const data = await readAdminResponse(res, "Failed to upload image.");
-      setRecipeForm((prev) => ({ ...prev, imageUrl: `${API}${data.url}` }));
+      setRecipeForm((prev) => ({ ...prev, imageUrl: data.url }));
     } catch (err) {
       setEditRecipeError(formatFetchError(err));
     } finally {
@@ -439,14 +439,6 @@ function AdminPage({ token, username, onLogout }) {
     if (!recipeForm.categoryIds || recipeForm.categoryIds.length === 0) return setEditRecipeError("Select at least one category.");
     if (!recipeForm.ingredients.trim()) return setEditRecipeError("Ingredients are required.");
     if (!recipeForm.steps.trim()) return setEditRecipeError("Cooking instructions are required.");
-
-    // Validate imageUrl if provided
-    if (recipeForm.imageUrl && 
-        !recipeForm.imageUrl.startsWith("http://") && 
-        !recipeForm.imageUrl.startsWith("https://") && 
-        !recipeForm.imageUrl.startsWith("/")) {
-      return setEditRecipeError("Image URL must be a valid URL or app upload path.");
-    }
 
     // Set the primary category from the first selected category
     const primaryCategory = categories.find(c => c.id === recipeForm.categoryIds[0])?.name || "";
@@ -785,16 +777,38 @@ function AdminPage({ token, username, onLogout }) {
                 placeholder="Search categories by name, emoji, or color..."
                 className={inputClass}
               />
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className={`${inputClass} bg-white lg:max-w-xs`}
-              >
-                <option value="all">All colors</option>
-                {CATEGORY_COLOR_OPTIONS.map((opt) => (
-                  <option key={opt.key} value={opt.key}>{opt.label}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('colorFilterDropdown').classList.toggle('hidden')}
+                  className={`${inputClass} bg-white lg:max-w-xs flex items-center justify-between`}
+                >
+                  <span>{categoryFilter === "all" ? "All colors" : CATEGORY_COLOR_OPTIONS.find(o => o.key === categoryFilter)?.label}</span>
+                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                <div id="colorFilterDropdown" className="hidden absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 z-10 p-2 min-w-[200px]">
+                  <button
+                    type="button"
+                    onClick={() => { setCategoryFilter("all"); document.getElementById('colorFilterDropdown').classList.add('hidden'); }}
+                    className={`w-full text-left px-3 py-2 rounded-md text-sm ${categoryFilter === "all" ? 'bg-slate-100 font-semibold' : 'hover:bg-slate-50'}`}
+                  >
+                    All colors
+                  </button>
+                  {CATEGORY_COLOR_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => { setCategoryFilter(opt.key); document.getElementById('colorFilterDropdown').classList.add('hidden'); }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm ${categoryFilter === opt.key ? 'bg-slate-100 font-semibold' : 'hover:bg-slate-50'}`}
+                    >
+                      <div className={`w-6 h-6 rounded bg-gradient-to-br ${getCategoryGradient(opt.key)}`} />
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button
                 onClick={startNewCategory}
                 className="bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm shadow-sm shrink-0"
@@ -877,16 +891,34 @@ function AdminPage({ token, username, onLogout }) {
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Color</label>
-                      <select
-                        name="colorKey"
-                        value={categoryForm.colorKey}
-                        onChange={handleCategoryInput}
-                        className={`${inputClass} bg-white`}
-                      >
-                        {CATEGORY_COLOR_OPTIONS.map((opt) => (
-                          <option key={opt.key} value={opt.key}>{opt.label}</option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById('colorPickerDropdown').classList.toggle('hidden')}
+                          className={`${inputClass} bg-white flex items-center justify-between`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-6 h-6 rounded bg-gradient-to-br ${getCategoryGradient(categoryForm.colorKey)}`} />
+                            {CATEGORY_COLOR_OPTIONS.find(o => o.key === categoryForm.colorKey)?.label}
+                          </div>
+                          <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        <div id="colorPickerDropdown" className="hidden absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 z-10 p-2 min-w-[200px]">
+                          {CATEGORY_COLOR_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() => { setCategoryForm(prev => ({ ...prev, colorKey: opt.key })); document.getElementById('colorPickerDropdown').classList.add('hidden'); }}
+                              className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm ${categoryForm.colorKey === opt.key ? 'bg-slate-100 font-semibold' : 'hover:bg-slate-50'}`}
+                            >
+                              <div className={`w-6 h-6 rounded bg-gradient-to-br ${getCategoryGradient(opt.key)}`} />
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-4 pt-2">
@@ -966,7 +998,11 @@ function AdminPage({ token, username, onLogout }) {
                   <div key={r.id} className="flex items-start gap-4 p-4">
                     <div className="w-12 h-12 shrink-0 rounded-xl overflow-hidden bg-gradient-to-br from-orange-100 to-amber-200 flex items-center justify-center">
                       {r.imageUrl ? (
-                        <img src={r.imageUrl} alt={r.title} className="w-full h-full object-cover" />
+                        <img 
+                          src={r.imageUrl} 
+                          alt={r.title} 
+                          className="w-full h-full object-cover" 
+                        />
                       ) : (
                         <span className="text-xl">🍽️</span>
                       )}
