@@ -170,9 +170,14 @@ export default function Dashboard({ username }) {
           next.delete(recipe.id);
           return next;
         });
+
+        setFavoriteRecipes((prev) => prev.filter((r) => r.id !== recipe.id));
       } else {
         await addFavoriteRecipe(recipe.id, username);
+
         setFavoriteIds((prev) => new Set(prev).add(recipe.id));
+
+        setFavoriteRecipes((prev) => [...prev, recipe]);
       }
     } catch (err) {
       console.error('Failed to update favourite:', formatFetchError(err));
@@ -330,14 +335,9 @@ export default function Dashboard({ username }) {
                         title={favoriteIds.has(recipe.id) ? 'Remove from favourites' : 'Add to favourites'}
                         className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 w-9 h-9 rounded-full flex items-center justify-center bg-white/90 shadow-sm hover:scale-105 transition-transform"
                       >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className={`w-5 h-5 ${favoriteIds.has(recipe.id) ? 'fill-red-500 text-red-500' : 'fill-none text-slate-400'}`}
-                          stroke="currentColor"
-                          strokeWidth="1.75"
-                        >
-                          <path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z" strokeLinejoin="round" />
-                        </svg>
+                        <span className="text-lg">
+                          {favoriteIds.has(recipe.id) ? "★" : "☆"}
+                        </span>
                       </button>
                     }
                   />
