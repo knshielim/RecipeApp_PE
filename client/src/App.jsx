@@ -45,6 +45,19 @@ function setStoredAuth(auth) {
   }
 }
 
+function clearLegacyAuthStorage() {
+  try {
+    localStorage.removeItem("currentUser");
+    localStorage.removeItem("token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("role");
+    localStorage.removeItem("user");
+    localStorage.removeItem("userId");
+  } catch {
+    // ignore storage errors
+  }
+}
+
 function LoginWrapper({ onLoginSuccess }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -106,10 +119,12 @@ function App() {
   }, [auth]);
 
   function handleLoginSuccess(token, username, role) {
+    clearLegacyAuthStorage();
     setAuth({ token, username, role });
   }
 
   function handleLogout() {
+    clearLegacyAuthStorage();
     setAuth(null);
   }
 
@@ -170,7 +185,7 @@ function App() {
             path="/meal-planner"
             element={
               <ProtectedRoute allowedRoles={["User", "Admin"]} auth={auth}>
-                <MealPlanner />
+                <MealPlanner token={auth.token} username={auth.username} />
               </ProtectedRoute>
             }
           />
@@ -178,7 +193,10 @@ function App() {
             path="/pantry"
             element={
               <ProtectedRoute allowedRoles={["User", "Admin"]} auth={auth}>
-                <PantryPage />
+                <PantryPage
+                  token={auth.token}
+                  username={auth.username}
+                />
               </ProtectedRoute>
             }
           />

@@ -11,7 +11,6 @@ import RecipeCard from './RecipeCard';
 import { API_BASE, parseApiResponse, formatFetchError } from '../utils/apiError';
 
 const API = API_BASE;
-const USER_ID = 1;
 
 const MEAL_TIMES = {
   breakfast: '8:00 AM',
@@ -52,7 +51,7 @@ const SITE_FEATURES = [
   },
 ];
 
-export default function Dashboard({ username }) {
+export default function Dashboard({ token, username }) {
   const { searchQuery } = useSearch();
   const { displayName } = useUserProfile();
   const [recentRecipes, setRecentRecipes] = useState([]);
@@ -67,9 +66,14 @@ export default function Dashboard({ username }) {
   const [favoriteRecipes, setFavoriteRecipes] = useState([]);
 
   useEffect(() => {
-    fetchDashboardData();
-    if (username) loadFavorites();
-  }, [username]);
+    if (token) {
+      fetchDashboardData();
+    }
+
+    if (username) {
+      loadFavorites();
+    }
+  }, [token, username]);
 
   useEffect(() => {
     if (!isSearchActive(searchQuery)) {
@@ -114,10 +118,20 @@ export default function Dashboard({ username }) {
     setLoading(true);
 
     try {
+      const authHeaders = {
+        Authorization: `Bearer ${token}`,
+      };
+
       const [recipesRes, planRes, statsRes, categoriesRes] = await Promise.all([
-        fetch(`${API}/api/dashboard/recent-recipes/${USER_ID}`),
-        fetch(`${API}/api/dashboard/weekly-summary/${USER_ID}`),
-        fetch(`${API}/api/dashboard/stats/${USER_ID}`),
+        fetch(`${API}/api/dashboard/recent-recipes`, {
+          headers: authHeaders,
+        }),
+        fetch(`${API}/api/dashboard/weekly-summary`, {
+          headers: authHeaders,
+        }),
+        fetch(`${API}/api/dashboard/stats`, {
+          headers: authHeaders,
+        }),
         fetch(`${API}/api/dashboard/categories`),
       ]);
 
@@ -248,180 +262,180 @@ export default function Dashboard({ username }) {
   return (
     <div className="space-y-8">
       <div className="flex gap-6 lg:gap-8">
-      {/* Main column */}
-      <div className="flex-1 min-w-0 space-y-8">
-        {!isSearching && (
-          <>
-            {/* Overview: stat + charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="soft-card px-5 py-5 flex flex-col justify-center">
-                <p className="text-xs text-slate-400 font-medium">Meals Planned</p>
-                <p className="text-3xl font-bold text-slate-800 mt-1">{stats.totalMealPlans}</p>
-                <p className="text-xs text-slate-500 mt-2">Across your current weekly plan</p>
-              </div>
-
-              <div className="soft-card p-5 lg:col-span-2">
-                <h2 className="section-title text-base mb-4">Meals This Week</h2>
-                <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={weeklyChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e8ece9" vertical={false} />
-                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={28} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#ffffff',
-                        border: '1px solid #e2e8e4',
-                        borderRadius: '12px',
-                        fontSize: '12px',
-                      }}
-                      formatter={(value) => [`${value} meal${value !== 1 ? 's' : ''}`, 'Planned']}
-                    />
-                    <Bar dataKey="meals" fill="#3d7a52" radius={[6, 6, 0, 0]} maxBarSize={36} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {categoryChartData.length > 0 && (
-              <div className="soft-card p-5">
-                <h2 className="section-title text-base mb-1">Recipes by Category</h2>
-                <p className="text-xs text-slate-500 mb-4">A snapshot of your saved recipe collection</p>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={categoryChartData} layout="vertical" margin={{ left: 8, right: 16 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e8ece9" horizontal={false} />
-                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                    <YAxis type="category" dataKey="category" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={72} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#ffffff',
-                        border: '1px solid #e2e8e4',
-                        borderRadius: '12px',
-                        fontSize: '12px',
-                      }}
-                    />
-                    <Bar dataKey="count" fill="#5a9a6e" radius={[0, 6, 6, 0]} maxBarSize={20} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Recent Recipes */}
-        <section>
-          <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
-            <h2 className="section-title">{isSearching ? 'Search Results' : 'Recent Recipes'}</h2>
-            {isSearching && (
-              <p className="text-sm text-slate-500">
-                {filteredRecipes.length} result{filteredRecipes.length !== 1 ? 's' : ''} for &ldquo;{searchQuery.trim()}&rdquo;
-              </p>
-            )}
-          </div>
-
-          {searchLoading ? (
-            <div className="soft-card p-10 text-center text-slate-500">Searching recipes...</div>
-          ) : filteredRecipes.length > 0 ? (
+        {/* Main column */}
+        <div className="flex-1 min-w-0 space-y-8">
+          {!isSearching && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredRecipes.map((recipe) => (
-                  <RecipeCard
-                    key={recipe.id}
-                    recipe={recipe}
-                    detailPath={`/recipes/${recipe.id}`}
-                    favoriteButton={
-                      <button
-                        type="button"
-                        onClick={() => handleToggleFavorite(recipe)}
-                        title={favoriteIds.has(recipe.id) ? 'Remove from favourites' : 'Add to favourites'}
-                        className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 w-9 h-9 rounded-full flex items-center justify-center bg-white/90 shadow-sm hover:scale-105 transition-transform"
-                      >
-                        <span className="text-lg">
-                          {favoriteIds.has(recipe.id) ? "★" : "☆"}
-                        </span>
-                      </button>
-                    }
-                  />
-                ))}
+              {/* Overview: stat + charts */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="soft-card px-5 py-5 flex flex-col justify-center">
+                  <p className="text-xs text-slate-400 font-medium">Meals Planned</p>
+                  <p className="text-3xl font-bold text-slate-800 mt-1">{stats.totalMealPlans}</p>
+                  <p className="text-xs text-slate-500 mt-2">Across your current weekly plan</p>
+                </div>
+
+                <div className="soft-card p-5 lg:col-span-2">
+                  <h2 className="section-title text-base mb-4">Meals This Week</h2>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <BarChart data={weeklyChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e8ece9" vertical={false} />
+                      <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={28} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e2e8e4',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                        }}
+                        formatter={(value) => [`${value} meal${value !== 1 ? 's' : ''}`, 'Planned']}
+                      />
+                      <Bar dataKey="meals" fill="#3d7a52" radius={[6, 6, 0, 0]} maxBarSize={36} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
 
-              <div className="mt-4 text-center">
-                <Link to="/recipes" className="btn-primary inline-block text-sm">
-                  View More Recipes
-                </Link>
-              </div>
+              {categoryChartData.length > 0 && (
+                <div className="soft-card p-5">
+                  <h2 className="section-title text-base mb-1">Recipes by Category</h2>
+                  <p className="text-xs text-slate-500 mb-4">A snapshot of your saved recipe collection</p>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={categoryChartData} layout="vertical" margin={{ left: 8, right: 16 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e8ece9" horizontal={false} />
+                      <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis type="category" dataKey="category" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={72} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e2e8e4',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                        }}
+                      />
+                      <Bar dataKey="count" fill="#5a9a6e" radius={[0, 6, 6, 0]} maxBarSize={20} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </>
-          ) : (
-            <div className="soft-card p-10 text-center">
-              <span className="text-5xl">🍳</span>
-              <p className="text-slate-500 mt-4 mb-5">
-                {isSearching || activeCategory
-                  ? 'No recipes match your search.'
-                  : 'No recipes saved yet'}
-              </p>
-              {!isSearching && (
-                <Link to="/ai-assistant" className="btn-primary inline-block text-sm">
-                  Ask AI for Recipe Ideas
-                </Link>
+          )}
+
+          {/* Recent Recipes */}
+          <section>
+            <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
+              <h2 className="section-title">{isSearching ? 'Search Results' : 'Recent Recipes'}</h2>
+              {isSearching && (
+                <p className="text-sm text-slate-500">
+                  {filteredRecipes.length} result{filteredRecipes.length !== 1 ? 's' : ''} for &ldquo;{searchQuery.trim()}&rdquo;
+                </p>
               )}
             </div>
-          )}
-        </section>
-      </div>
 
-      {/* Events sidebar */}
-      {!isSearching && (
-        <aside className="hidden xl:block w-72 shrink-0">
-          <h2 className="section-title mb-4 leading-snug">
-            Meals you may be interested
-          </h2>
+            {searchLoading ? (
+              <div className="soft-card p-10 text-center text-slate-500">Searching recipes...</div>
+            ) : filteredRecipes.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filteredRecipes.map((recipe) => (
+                    <RecipeCard
+                      key={recipe.id}
+                      recipe={recipe}
+                      detailPath={`/recipes/${recipe.id}`}
+                      favoriteButton={
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFavorite(recipe)}
+                          title={favoriteIds.has(recipe.id) ? 'Remove from favourites' : 'Add to favourites'}
+                          className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 w-9 h-9 rounded-full flex items-center justify-center bg-white/90 shadow-sm hover:scale-105 transition-transform"
+                        >
+                          <span className="text-lg">
+                            {favoriteIds.has(recipe.id) ? "★" : "☆"}
+                          </span>
+                        </button>
+                      }
+                    />
+                  ))}
+                </div>
 
-          {eventCards.length > 0 ? (
-            <div className="space-y-3">
-              {eventCards.map((event) => (
-                <article key={event.id} className="soft-card flex gap-3 p-3 hover:shadow-lg transition-shadow">
-                  <div className="w-16 h-16 shrink-0 rounded-xl bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center text-2xl">
-                    🍽️
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-slate-800 text-sm leading-snug truncate">
-                      {event.title}
-                    </h3>
-                    <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-500">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-3.5 h-3.5 text-brand shrink-0">
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M12 7v5l3 2" strokeLinecap="round" />
-                      </svg>
-                      <span className="capitalize">{event.day}</span>
-                      <span className="text-slate-300">|</span>
-                      <span>{event.time}</span>
+                <div className="mt-4 text-center">
+                  <Link to="/recipes" className="btn-primary inline-block text-sm">
+                    View More Recipes
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <div className="soft-card p-10 text-center">
+                <span className="text-5xl">🍳</span>
+                <p className="text-slate-500 mt-4 mb-5">
+                  {isSearching || activeCategory
+                    ? 'No recipes match your search.'
+                    : 'No recipes saved yet'}
+                </p>
+                {!isSearching && (
+                  <Link to="/ai-assistant" className="btn-primary inline-block text-sm">
+                    Ask AI for Recipe Ideas
+                  </Link>
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+
+        {/* Events sidebar */}
+        {!isSearching && (
+          <aside className="hidden xl:block w-72 shrink-0">
+            <h2 className="section-title mb-4 leading-snug">
+              Meals you may be interested
+            </h2>
+
+            {eventCards.length > 0 ? (
+              <div className="space-y-3">
+                {eventCards.map((event) => (
+                  <article key={event.id} className="soft-card flex gap-3 p-3 hover:shadow-lg transition-shadow">
+                    <div className="w-16 h-16 shrink-0 rounded-xl bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center text-2xl">
+                      🍽️
                     </div>
-                    <div className="flex items-center gap-1.5 mt-2">
-                      <UserAvatar size="xs" />
-                      <span className="text-[11px] text-slate-500">
-                        Cook with <span className="font-semibold text-slate-700">{displayName}</span>
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-slate-800 text-sm leading-snug truncate">
+                        {event.title}
+                      </h3>
+                      <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-500">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-3.5 h-3.5 text-brand shrink-0">
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M12 7v5l3 2" strokeLinecap="round" />
+                        </svg>
+                        <span className="capitalize">{event.day}</span>
+                        <span className="text-slate-300">|</span>
+                        <span>{event.time}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <UserAvatar size="xs" />
+                        <span className="text-[11px] text-slate-500">
+                          Cook with <span className="font-semibold text-slate-700">{displayName}</span>
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="soft-card p-6 text-center">
-              <span className="text-3xl">📅</span>
-              <p className="text-sm text-slate-500 mt-3 mb-4">No meals planned yet</p>
-              <Link to="/meal-planner" className="text-brand font-semibold text-sm hover:underline">
-                Plan your week →
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="soft-card p-6 text-center">
+                <span className="text-3xl">📅</span>
+                <p className="text-sm text-slate-500 mt-3 mb-4">No meals planned yet</p>
+                <Link to="/meal-planner" className="text-brand font-semibold text-sm hover:underline">
+                  Plan your week →
+                </Link>
+              </div>
+            )}
+
+            <div className="mt-5">
+              <Link to="/ai-assistant" className="btn-primary w-full text-center block text-sm">
+                Go to AI Assistant
               </Link>
             </div>
-          )}
-
-          <div className="mt-5">
-            <Link to="/ai-assistant" className="btn-primary w-full text-center block text-sm">
-              Go to AI Assistant
-            </Link>
-          </div>
-        </aside>
-      )}
+          </aside>
+        )}
       </div>
 
       {/* Full-width features section */}

@@ -19,12 +19,11 @@ import {
 } from "../utils/weekUtils";
 import { formatFetchError } from "../utils/apiError";
 
-const USER_ID = 1;
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SLOTS = ["breakfast", "lunch", "dinner"];
 
-export default function MealPlanner() {
+export default function MealPlanner({ token }) {
   const { searchQuery } = useSearch();
   const [weekStart, setWeekStart] = useState(currentWeekStart());
   const [weekOffset, setWeekOffset] = useState(0);
@@ -50,15 +49,17 @@ export default function MealPlanner() {
   }, [weekOffset]);
 
   useEffect(() => {
-    fetchData();
-  }, [weekStart]);
+    if (token) {
+      fetchData();
+    }
+  }, [token, weekStart]);
 
   async function fetchData() {
     setLoading(true);
     try {
       const [planData, recipeData] = await Promise.all([
-        getMealPlans(USER_ID, weekStart),
-        getRecipes(USER_ID),
+        getMealPlans(token, weekStart),
+        getRecipes(token),
       ]);
       setPlans(planData);
       setRecipes(recipeData);
@@ -140,16 +141,15 @@ export default function MealPlanner() {
     setFormError("");
     try {
       const payload = {
-        userId: USER_ID,
         weekStartDate: form.weekStartDate,
         day: form.day,
         mealSlot: form.mealSlot,
         recipeId: Number(form.recipeId),
       };
       if (form.planId) {
-        await updateMealPlan(form.planId, payload);
+        await updateMealPlan(token, form.planId, payload);
       } else {
-        await createMealPlan(payload);
+        await createMealPlan(token, payload);
       }
       closeForm();
       await fetchData();
@@ -165,7 +165,7 @@ export default function MealPlanner() {
     setSaving(true);
     setFormError("");
     try {
-      await deleteMealPlan(form.planId);
+      await deleteMealPlan(token, form.planId);
       closeForm();
       await fetchData();
     } catch (err) {
@@ -180,7 +180,7 @@ export default function MealPlanner() {
     setGenerating(true);
     setGenerateError("");
     try {
-      await autoGenerateWeek(USER_ID, weekStart);
+      await autoGenerateWeek(token, weekStart);
       await fetchData();
     } catch (err) {
       setGenerateError(formatFetchError(err) || "Failed to generate the weekly plan.");
@@ -352,8 +352,13 @@ export default function MealPlanner() {
       )}
 
       {/* Grocery list */}
-      <GroceryList weekStart={weekStart} onSearchResultsChange={setSearchHasGroceryResults} />
+      <GroceryList
+        token={token}
+        weekStart={weekStart}
+        onSearchResultsChange={setSearchHasGroceryResults}
+      />
 
+      
       {/* Auto-generate confirmation */}
       {confirmGenerate && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">

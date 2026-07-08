@@ -1,5 +1,8 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Server.Data;
 using Server.DTO;
 using Server.Models;
 using Server.Services;
@@ -7,7 +10,8 @@ using Server.Services;
 namespace ServerApi.Controllers;
 
 [ApiController]
-[Route("api/mealplans/{userId:int}/grocery-list")]
+[Authorize]
+[Route("api/mealplans/grocery-list")]
 public class GroceryListController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -17,16 +21,14 @@ public class GroceryListController : ControllerBase
         _db = db;
     }
 
-    // GET api/mealplans/{userId}/grocery-list?weekStart=2026-07-13
-    // Returns the saved list for the week; items is null when none has been generated yet.
+    // GET api/mealplans/grocery-list?weekStart=2026-07-13
     [HttpGet]
-    public async Task<IActionResult> Get(int userId, [FromQuery] string? weekStart = null)
+    public async Task<IActionResult> Get([FromQuery] string? weekStart = null)
     {
-        if (userId <= 0)
-        {
-            return ErrorResponse(StatusCodes.Status400BadRequest, "User ID must be valid.");
-        }
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
 
+        var userId = userIdResult.UserId;
         var week = WeekDateHelper.ParseOrCurrent(weekStart);
 
         var items = await _db.GroceryListItems
@@ -45,17 +47,14 @@ public class GroceryListController : ControllerBase
         });
     }
 
-    // POST api/mealplans/{userId}/grocery-list/generate?weekStart=2026-07-13
-    // Rebuilds the list from the week's meal plan. Custom items and the checked
-    // state of unchanged items are preserved.
+    // POST api/mealplans/grocery-list/generate?weekStart=2026-07-13
     [HttpPost("generate")]
-    public async Task<IActionResult> Generate(int userId, [FromQuery] string? weekStart = null)
+    public async Task<IActionResult> Generate([FromQuery] string? weekStart = null)
     {
-        if (userId <= 0)
-        {
-            return ErrorResponse(StatusCodes.Status400BadRequest, "User ID must be valid.");
-        }
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
 
+        var userId = userIdResult.UserId;
         var week = WeekDateHelper.ParseOrCurrent(weekStart);
 
         var plannedRecipes = await _db.MealPlans
@@ -65,13 +64,15 @@ public class GroceryListController : ControllerBase
             .ToListAsync();
 
         var generated = GroceryListBuilder.Build(
-            userId, week, plannedRecipes.Select(r => r.Ingredients));
+            userId,
+            week,
+            plannedRecipes.Select(r => r.Ingredients)
+        );
 
         var existing = await _db.GroceryListItems
             .Where(g => g.UserId == userId && g.WeekStartDate == week)
             .ToListAsync();
 
-        // Keep the checked state of items that are still on the list.
         var checkedKeys = existing
             .Where(g => g.IsChecked)
             .Select(ItemKey)
@@ -86,6 +87,7 @@ public class GroceryListController : ControllerBase
 
         _db.GroceryListItems.RemoveRange(existing.Where(g => !g.IsCustom));
         _db.GroceryListItems.AddRange(generated);
+
         await _db.SaveChangesAsync();
 
         var items = generated.Concat(custom)
@@ -101,32 +103,37 @@ public class GroceryListController : ControllerBase
         });
     }
 
-    // POST api/mealplans/{userId}/grocery-list/items?weekStart=2026-07-13
+    // POST api/mealplans/grocery-list/items?weekStart=2026-07-13
     [HttpPost("items")]
     public async Task<IActionResult> AddItem(
-        int userId,
         [FromBody] GroceryItemCreateDTO dto,
         [FromQuery] string? weekStart = null)
     {
-        if (userId <= 0)
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
+
+        var userId = userIdResult.UserId;
+
+        if (dto == null)
         {
-            return ErrorResponse(StatusCodes.Status400BadRequest, "User ID must be valid.");
+            return ErrorResponse(StatusCodes.Status400BadRequest, "Grocery item data is required.");
         }
 
-        var name = dto.Name.Trim();
+        var name = dto.Name?.Trim() ?? "";
 
         if (name.Length == 0)
         {
             return ErrorResponse(StatusCodes.Status400BadRequest, "Item name is required.");
         }
 
+        var unit = dto.Unit?.Trim() ?? "";
         var week = WeekDateHelper.ParseOrCurrent(weekStart);
 
         var duplicate = await _db.GroceryListItems.AnyAsync(g =>
             g.UserId == userId &&
             g.WeekStartDate == week &&
             g.Name.ToLower() == name.ToLower() &&
-            g.Unit.ToLower() == dto.Unit.Trim().ToLower());
+            g.Unit.ToLower() == unit.ToLower());
 
         if (duplicate)
         {
@@ -139,7 +146,7 @@ public class GroceryListController : ControllerBase
             WeekStartDate = week,
             Name = name,
             Quantity = dto.Quantity,
-            Unit = dto.Unit.Trim(),
+            Unit = unit,
             Occurrences = 0,
             IsCustom = true,
         };
@@ -150,10 +157,25 @@ public class GroceryListController : ControllerBase
         return Ok(ToItemDto(item));
     }
 
-    // PATCH api/mealplans/{userId}/grocery-list/items/{id}
+    // PATCH api/mealplans/grocery-list/items/{id}
     [HttpPatch("items/{id:int}")]
-    public async Task<IActionResult> UpdateItem(int userId, int id, [FromBody] GroceryItemUpdateDTO dto)
+    public async Task<IActionResult> UpdateItem(int id, [FromBody] GroceryItemUpdateDTO dto)
     {
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
+
+        var userId = userIdResult.UserId;
+
+        if (id <= 0)
+        {
+            return ErrorResponse(StatusCodes.Status400BadRequest, "Grocery item ID must be valid.");
+        }
+
+        if (dto == null)
+        {
+            return ErrorResponse(StatusCodes.Status400BadRequest, "Grocery item data is required.");
+        }
+
         var item = await _db.GroceryListItems
             .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId);
 
@@ -194,10 +216,20 @@ public class GroceryListController : ControllerBase
         return Ok(ToItemDto(item));
     }
 
-    // DELETE api/mealplans/{userId}/grocery-list/items/{id}
+    // DELETE api/mealplans/grocery-list/items/{id}
     [HttpDelete("items/{id:int}")]
-    public async Task<IActionResult> DeleteItem(int userId, int id)
+    public async Task<IActionResult> DeleteItem(int id)
     {
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
+
+        var userId = userIdResult.UserId;
+
+        if (id <= 0)
+        {
+            return ErrorResponse(StatusCodes.Status400BadRequest, "Grocery item ID must be valid.");
+        }
+
         var item = await _db.GroceryListItems
             .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId);
 
@@ -212,10 +244,14 @@ public class GroceryListController : ControllerBase
         return Ok(new { deleted = true });
     }
 
-    // POST api/mealplans/{userId}/grocery-list/uncheck-all?weekStart=2026-07-13
+    // POST api/mealplans/grocery-list/uncheck-all?weekStart=2026-07-13
     [HttpPost("uncheck-all")]
-    public async Task<IActionResult> UncheckAll(int userId, [FromQuery] string? weekStart = null)
+    public async Task<IActionResult> UncheckAll([FromQuery] string? weekStart = null)
     {
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
+
+        var userId = userIdResult.UserId;
         var week = WeekDateHelper.ParseOrCurrent(weekStart);
 
         var items = await _db.GroceryListItems
@@ -230,6 +266,29 @@ public class GroceryListController : ControllerBase
         await _db.SaveChangesAsync();
 
         return Ok(new { uncheckedCount = items.Count });
+    }
+
+    private (int UserId, IActionResult? Result) GetCurrentUserId()
+    {
+        var username =
+            User.FindFirst(ClaimTypes.Name)?.Value ??
+            User.FindFirst("username")?.Value ??
+            User.FindFirst("unique_name")?.Value ??
+            User.Identity?.Name;
+
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return (0, ErrorResponse(StatusCodes.Status401Unauthorized, "You must be logged in."));
+        }
+
+        var userId = UserIdResolver.GetUserId(username);
+
+        if (userId <= 0)
+        {
+            return (0, ErrorResponse(StatusCodes.Status401Unauthorized, "Could not resolve the current user."));
+        }
+
+        return (userId, null);
     }
 
     private static object ToItemDto(GroceryListItem item) => new

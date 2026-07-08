@@ -1,5 +1,8 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Server.Data;
 using Server.DTO;
 using Server.Models;
 using Server.Services;
@@ -7,6 +10,7 @@ using Server.Services;
 namespace ServerApi.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/mealplans")]
 public class MealPlanController : ControllerBase
 {
@@ -22,17 +26,14 @@ public class MealPlanController : ControllerBase
         _suggester = suggester;
     }
 
-    // GET api/mealplans/{userId}?weekStart=2026-07-07
-    [HttpGet("{userId:int}")]
-    public async Task<IActionResult> GetMealPlans(int userId, [FromQuery] string? weekStart = null)
+    // GET api/mealplans?weekStart=2026-07-07
+    [HttpGet]
+    public async Task<IActionResult> GetMealPlans([FromQuery] string? weekStart = null)
     {
-        if (userId <= 0)
-        {
-            return ErrorResponse(
-                StatusCodes.Status400BadRequest,
-                "User ID must be valid.");
-        }
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
 
+        var userId = userIdResult.UserId;
         var week = WeekDateHelper.ParseOrCurrent(weekStart);
 
         var plans = await _db.MealPlans
@@ -53,16 +54,14 @@ public class MealPlanController : ControllerBase
         return Ok(plans);
     }
 
-    // GET api/mealplans/recipes/{userId}
-    [HttpGet("recipes/{userId:int}")]
-    public async Task<IActionResult> GetRecipes(int userId)
+    // GET api/mealplans/recipes
+    [HttpGet("recipes")]
+    public async Task<IActionResult> GetRecipes()
     {
-        if (userId <= 0)
-        {
-            return ErrorResponse(
-                StatusCodes.Status400BadRequest,
-                "User ID must be valid.");
-        }
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
+
+        var userId = userIdResult.UserId;
 
         var recipes = await _db.Recipes
             .Where(r => r.UserId == userId)
@@ -83,16 +82,28 @@ public class MealPlanController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] MealPlanRequestDTO request)
     {
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
+
+        var userId = userIdResult.UserId;
+
+        if (request == null)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "Meal plan data is required.");
+        }
+
         var week = WeekDateHelper.ParseOrCurrent(request.WeekStartDate);
 
-        var error = await ValidateRequest(request);
+        var error = await ValidateRequest(request, userId);
         if (error != null)
         {
             return error;
         }
 
         var occupied = await _db.MealPlans.AnyAsync(m =>
-            m.UserId == request.UserId &&
+            m.UserId == userId &&
             m.WeekStartDate == week &&
             m.Day == request.Day &&
             m.MealSlot == request.MealSlot);
@@ -106,7 +117,7 @@ public class MealPlanController : ControllerBase
 
         var plan = new MealPlan
         {
-            UserId = request.UserId,
+            UserId = userId,
             WeekStartDate = week,
             Day = request.Day,
             MealSlot = request.MealSlot,
@@ -130,7 +141,27 @@ public class MealPlanController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] MealPlanRequestDTO request)
     {
-        var plan = await _db.MealPlans.FindAsync(id);
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
+
+        var userId = userIdResult.UserId;
+
+        if (request == null)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "Meal plan data is required.");
+        }
+
+        if (id <= 0)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "Meal plan entry ID must be valid.");
+        }
+
+        var plan = await _db.MealPlans
+            .FirstOrDefaultAsync(m => m.Id == id && m.UserId == userId);
 
         if (plan == null)
         {
@@ -139,17 +170,10 @@ public class MealPlanController : ControllerBase
                 "Meal plan entry not found.");
         }
 
-        if (plan.UserId != request.UserId)
-        {
-            return ErrorResponse(
-                StatusCodes.Status403Forbidden,
-                "You cannot update a meal plan entry that belongs to another user.");
-        }
-
         var week = WeekDateHelper.ParseOrCurrent(
             request.WeekStartDate ?? plan.WeekStartDate.ToString("yyyy-MM-dd"));
 
-        var error = await ValidateRequest(request);
+        var error = await ValidateRequest(request, userId);
         if (error != null)
         {
             return error;
@@ -157,7 +181,7 @@ public class MealPlanController : ControllerBase
 
         var occupied = await _db.MealPlans.AnyAsync(m =>
             m.Id != id &&
-            m.UserId == request.UserId &&
+            m.UserId == userId &&
             m.WeekStartDate == week &&
             m.Day == request.Day &&
             m.MealSlot == request.MealSlot);
@@ -190,7 +214,20 @@ public class MealPlanController : ControllerBase
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var plan = await _db.MealPlans.FindAsync(id);
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
+
+        var userId = userIdResult.UserId;
+
+        if (id <= 0)
+        {
+            return ErrorResponse(
+                StatusCodes.Status400BadRequest,
+                "Meal plan entry ID must be valid.");
+        }
+
+        var plan = await _db.MealPlans
+            .FirstOrDefaultAsync(m => m.Id == id && m.UserId == userId);
 
         if (plan == null)
         {
@@ -205,17 +242,14 @@ public class MealPlanController : ControllerBase
         return Ok(new { message = "Meal plan entry deleted." });
     }
 
-    // POST api/mealplans/{userId}/auto-generate?weekStart=2026-07-07
-    [HttpPost("{userId:int}/auto-generate")]
-    public async Task<IActionResult> AutoGenerate(int userId, [FromQuery] string? weekStart = null)
+    // POST api/mealplans/auto-generate?weekStart=2026-07-07
+    [HttpPost("auto-generate")]
+    public async Task<IActionResult> AutoGenerate([FromQuery] string? weekStart = null)
     {
-        if (userId <= 0)
-        {
-            return ErrorResponse(
-                StatusCodes.Status400BadRequest,
-                "User ID must be valid.");
-        }
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
 
+        var userId = userIdResult.UserId;
         var week = WeekDateHelper.ParseOrCurrent(weekStart);
 
         var recipes = await _db.Recipes
@@ -270,19 +304,16 @@ public class MealPlanController : ControllerBase
         });
     }
 
-    // POST api/mealplans/{userId}/apply-plan?weekStart=2026-07-07
-    [HttpPost("{userId:int}/apply-plan")]
+    // POST api/mealplans/apply-plan?weekStart=2026-07-07
+    [HttpPost("apply-plan")]
     public async Task<IActionResult> ApplyPlan(
-        int userId,
         [FromBody] List<PlanEntryDTO> entries,
         [FromQuery] string? weekStart = null)
     {
-        if (userId <= 0)
-        {
-            return ErrorResponse(
-                StatusCodes.Status400BadRequest,
-                "User ID must be valid.");
-        }
+        var userIdResult = GetCurrentUserId();
+        if (userIdResult.Result != null) return userIdResult.Result;
+
+        var userId = userIdResult.UserId;
 
         if (entries == null || entries.Count == 0)
         {
@@ -366,7 +397,7 @@ public class MealPlanController : ControllerBase
         });
     }
 
-    private async Task<IActionResult?> ValidateRequest(MealPlanRequestDTO request)
+    private async Task<IActionResult?> ValidateRequest(MealPlanRequestDTO request, int userId)
     {
         if (!ValidDays.Contains(request.Day))
         {
@@ -384,7 +415,7 @@ public class MealPlanController : ControllerBase
 
         var recipeExists = await _db.Recipes.AnyAsync(r =>
             r.Id == request.RecipeId &&
-            r.UserId == request.UserId);
+            r.UserId == userId);
 
         if (!recipeExists)
         {
@@ -396,6 +427,29 @@ public class MealPlanController : ControllerBase
         return null;
     }
 
+    private (int UserId, IActionResult? Result) GetCurrentUserId()
+    {
+        var username =
+            User.FindFirst(ClaimTypes.Name)?.Value ??
+            User.FindFirst("username")?.Value ??
+            User.FindFirst("unique_name")?.Value ??
+            User.Identity?.Name;
+
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return (0, ErrorResponse(StatusCodes.Status401Unauthorized, "You must be logged in."));
+        }
+
+        var userId = UserIdResolver.GetUserId(username);
+
+        if (userId <= 0)
+        {
+            return (0, ErrorResponse(StatusCodes.Status401Unauthorized, "Could not resolve the current user."));
+        }
+
+        return (userId, null);
+    }
+
     private ObjectResult ErrorResponse(int statusCode, string message)
     {
         return StatusCode(statusCode, new ApiErrorResponse
@@ -405,7 +459,6 @@ public class MealPlanController : ControllerBase
             TraceId = HttpContext?.TraceIdentifier ?? ""
         });
     }
-
 }
 
 public record PlanEntryDTO(string Day, string MealSlot, int RecipeId);

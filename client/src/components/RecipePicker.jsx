@@ -3,7 +3,7 @@ import { API_BASE, parseApiResponse, formatFetchError } from "../utils/apiError"
 
 const API = API_BASE;
 
-export default function RecipePicker({ userId = 1, onSelect, onClose }) {
+export default function RecipePicker({ token, onSelect, onClose }) {
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -16,7 +16,11 @@ export default function RecipePicker({ userId = 1, onSelect, onClose }) {
       setError("");
 
       try {
-        const res = await fetch(`${API}/api/mealplans/recipes/${userId}`);
+        const res = await fetch(`${API}/api/mealplans/recipes`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
         const data = await parseApiResponse(res, "Couldn't load your recipes.");
 
         if (!cancelled) {

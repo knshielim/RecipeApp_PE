@@ -6,7 +6,6 @@ import { matchesSearch, isSearchActive } from '../utils/search';
 import { API_BASE, parseApiResponse, getApiErrorMessage, formatFetchError } from '../utils/apiError';
 
 const API = API_BASE;
-const USER_ID = 1;
 
 const CATEGORIES = ['Vegetables', 'Proteins', 'Dairy', 'Grains', 'Spices', 'Fruits', 'Oils', 'Other'];
 
@@ -36,7 +35,7 @@ function isExpired(dateString) {
   return new Date(dateString) < new Date();
 }
 
-export default function PantryPage() {
+export default function PantryPage({ token, username }) {
   const { searchQuery } = useSearch();
   const [pantryItems, setPantryItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,15 +55,21 @@ export default function PantryPage() {
   const [showDetector, setShowDetector] = useState(false);
 
   useEffect(() => {
-    fetchPantryItems();
-  }, []);
+    if (token) {
+      fetchPantryItems();
+    }
+  }, [token]);
 
   async function fetchPantryItems() {
     setLoading(true);
     setPageError('');
 
     try {
-      const res = await fetch(`${API}/api/pantry/${USER_ID}`);
+      const res = await fetch(`${API}/api/pantry`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       const data = await parseApiResponse(res, 'Could not load pantry items.');
 
       setPantryItems(Array.isArray(data) ? data : []);
@@ -119,7 +124,6 @@ export default function PantryPage() {
       defaultExpiry.setDate(defaultExpiry.getDate() + 30);
 
       const payload = {
-        userId: USER_ID,
         ingredientName: formData.ingredientName.trim(),
         category: formData.category,
         quantity: parseInt(formData.quantity, 10),
@@ -131,15 +135,15 @@ export default function PantryPage() {
 
       const res = editingId
         ? await fetch(`${API}/api/pantry/${editingId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          })
+          method: 'PUT',
+          headers: jsonAuthHeaders,
+          body: JSON.stringify(payload),
+        })
         : await fetch(`${API}/api/pantry`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
+          method: 'POST',
+          headers: jsonAuthHeaders,
+          body: JSON.stringify(payload),
+        });
 
       const data = await res.json().catch(() => null);
 
@@ -211,6 +215,7 @@ export default function PantryPage() {
     try {
       const res = await fetch(`${API}/api/pantry/${id}`, {
         method: 'DELETE',
+        headers: authHeaders,
       });
 
       const data = await res.json().catch(() => null);
@@ -246,6 +251,14 @@ export default function PantryPage() {
   const expiringCount = pantryItems.filter((i) => isExpiringSoon(i.expiryDate) && !isExpired(i.expiryDate)).length;
   const expiredCount = pantryItems.filter((i) => isExpired(i.expiryDate)).length;
 
+  if (!token) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="text-slate-500">Please log in to view your pantry.</div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -253,6 +266,15 @@ export default function PantryPage() {
       </div>
     );
   }
+
+  const authHeaders = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  const jsonAuthHeaders = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -405,13 +427,12 @@ export default function PantryPage() {
             {filteredPantryItems.map((item) => (
               <div
                 key={item.id}
-                className={`border rounded-2xl p-5 flex justify-between items-start transition-all hover:shadow-md ${
-                  isExpired(item.expiryDate)
-                    ? 'border-red-300 bg-red-50'
-                    : isExpiringSoon(item.expiryDate)
-                      ? 'border-yellow-300 bg-yellow-50'
-                      : 'border-slate-100 bg-white'
-                }`}
+                className={`border rounded-2xl p-5 flex justify-between items-start transition-all hover:shadow-md ${isExpired(item.expiryDate)
+                  ? 'border-red-300 bg-red-50'
+                  : isExpiringSoon(item.expiryDate)
+                    ? 'border-yellow-300 bg-yellow-50'
+                    : 'border-slate-100 bg-white'
+                  }`}
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">

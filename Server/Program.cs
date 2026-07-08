@@ -15,6 +15,7 @@ using Server.Models;
 using Server.Data;
 using Server.Middleware;
 using Server.DTO;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -367,6 +368,20 @@ static GeneratedRecipe? ParseGeneratedRecipe(string content)
     {
         return null;
     }
+}
+
+static async Task<User?> GetCurrentUserAsync(AppDbContext db, HttpContext http)
+{
+    var username =
+        http.User.FindFirst(ClaimTypes.Name)?.Value ??
+        http.User.FindFirst("username")?.Value ??
+        http.User.FindFirst("unique_name")?.Value ??
+        http.User.Identity?.Name;
+
+    if (string.IsNullOrWhiteSpace(username))
+        return null;
+
+    return await db.Users.FirstOrDefaultAsync(u => u.Username == username);
 }
 
 // ---------- Endpoints ----------
@@ -867,13 +882,14 @@ app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest? req, Kernel
 // ---------- Dashboard Endpoints ----------
 
 
-app.MapGet("/api/dashboard/stats/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
+app.MapGet("/api/dashboard/stats", async (AppDbContext db, HttpContext http) =>
 {
-    var userIdError = ValidateUserId(http, userId);
-    if (userIdError != null)
-    {
-        return userIdError;
-    }
+    var user = await GetCurrentUserAsync(db, http);
+
+    if (user == null)
+        return Results.Unauthorized();
+
+    int userId = UserIdResolver.GetUserId(user.Username);
 
     var totalRecipes = await db.Recipes.CountAsync(r => r.UserId == userId);
     var totalMealPlans = await db.MealPlans.CountAsync(m => m.UserId == userId);
@@ -885,13 +901,14 @@ app.MapGet("/api/dashboard/stats/{userId:int}", async (int userId, AppDbContext 
     });
 });
 
-app.MapGet("/api/dashboard/recent-recipes/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
+app.MapGet("/api/dashboard/recent-recipes", async (AppDbContext db, HttpContext http) =>
 {
-    var userIdError = ValidateUserId(http, userId);
-    if (userIdError != null)
-    {
-        return userIdError;
-    }
+    var user = await GetCurrentUserAsync(db, http);
+
+    if (user == null)
+        return Results.Unauthorized();
+
+    int userId = UserIdResolver.GetUserId(user.Username);
 
     var recentRecipes = await db.Recipes
         .Where(r => r.UserId == userId)
@@ -940,14 +957,14 @@ app.MapGet("/api/dashboard/recent-recipes/{userId:int}", async (int userId, AppD
     return Results.Ok(result);
 });
 
-
-app.MapGet("/api/dashboard/weekly-summary/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
+app.MapGet("/api/dashboard/weekly-summary", async (AppDbContext db, HttpContext http) =>
 {
-    var userIdError = ValidateUserId(http, userId);
-    if (userIdError != null)
-    {
-        return userIdError;
-    }
+    var user = await GetCurrentUserAsync(db, http);
+
+    if (user == null)
+        return Results.Unauthorized();
+
+    int userId = UserIdResolver.GetUserId(user.Username);
 
     var weeklyPlans = await db.MealPlans
         .Where(m => m.UserId == userId)
@@ -992,6 +1009,20 @@ app.MapGet("/api/dashboard/categories", async (AppDbContext db) =>
 });
 
 // ---------- Pantry Endpoints ----------
+app.MapGet("/api/pantry", async (AppDbContext db, HttpContext http) =>
+{
+    var user = await GetCurrentUserAsync(db, http);
+
+    if (user == null)
+        return Results.Unauthorized();
+
+    var pantryItems = await db.Pantries
+        .Where(p => p.UserId == UserIdResolver.GetUserId(user.Username))
+        .OrderBy(p => p.ExpiryDate)
+        .ToListAsync();
+
+    return Results.Ok(pantryItems);
+});
 
 app.MapGet("/api/pantry/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
 {
@@ -1009,58 +1040,38 @@ app.MapGet("/api/pantry/{userId:int}", async (int userId, AppDbContext db, HttpC
 
     return Results.Ok(pantryItems);
 });
-
 app.MapPost("/api/pantry", async (PantryRequest? req, AppDbContext db, HttpContext http) =>
 {
+    var user = await GetCurrentUserAsync(db, http);
+
+    if (user == null)
+        return Results.Unauthorized();
+
     if (req == null)
     {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Pantry item data is required.");
-    }
-
-    if (req.UserId <= 0)
-    {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "User ID must be valid.");
+        return Results.BadRequest(new
+        {
+            message = "Pantry item data is required."
+        });
     }
 
     if (string.IsNullOrWhiteSpace(req.IngredientName))
     {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Ingredient name is required.");
-    }
-
-    if (string.IsNullOrWhiteSpace(req.Category))
-    {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Category is required.");
-    }
-
-    if (req.Quantity < 0)
-    {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Quantity cannot be negative.");
+        return Results.BadRequest(new
+        {
+            message = "Ingredient name is required."
+        });
     }
 
     var pantryItem = new Pantry
     {
-        UserId = req.UserId,
+        UserId = UserIdResolver.GetUserId(user.Username),
         IngredientName = req.IngredientName.Trim(),
-        Category = req.Category.Trim(),
+        Category = string.IsNullOrWhiteSpace(req.Category) ? "Other" : req.Category.Trim(),
         Quantity = req.Quantity > 0 ? req.Quantity : 1,
         Unit = req.Unit?.Trim() ?? "",
         ExpiryDate = req.ExpiryDate == default
-            ? DateTime.UtcNow.AddDays(14)
+            ? DateTime.UtcNow.AddDays(30)
             : req.ExpiryDate
     };
 
@@ -1072,54 +1083,36 @@ app.MapPost("/api/pantry", async (PantryRequest? req, AppDbContext db, HttpConte
 
 app.MapPut("/api/pantry/{id:int}", async (int id, PantryRequest? req, AppDbContext db, HttpContext http) =>
 {
+    var user = await GetCurrentUserAsync(db, http);
+
+    if (user == null)
+        return Results.Unauthorized();
+
     if (id <= 0)
     {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Pantry item ID must be valid.");
+        return Results.BadRequest(new
+        {
+            message = "Pantry item ID must be valid."
+        });
     }
 
     if (req == null)
     {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Pantry item data is required.");
+        return Results.BadRequest(new
+        {
+            message = "Pantry item data is required."
+        });
     }
 
-    var pantryItem = await db.Pantries.FindAsync(id);
+    var pantryItem = await db.Pantries
+        .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserIdResolver.GetUserId(user.Username));
 
     if (pantryItem == null)
     {
-        return ApiError(
-            http,
-            StatusCodes.Status404NotFound,
-            "Pantry item not found.");
-    }
-
-    if (string.IsNullOrWhiteSpace(req.IngredientName))
-    {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Ingredient name is required.");
-    }
-
-    if (string.IsNullOrWhiteSpace(req.Category))
-    {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Category is required.");
-    }
-
-    if (req.Quantity < 0)
-    {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Quantity cannot be negative.");
+        return Results.NotFound(new
+        {
+            message = "Pantry item not found."
+        });
     }
 
     pantryItem.IngredientName = req.IngredientName.Trim();
@@ -1137,28 +1130,37 @@ app.MapPut("/api/pantry/{id:int}", async (int id, PantryRequest? req, AppDbConte
 
 app.MapDelete("/api/pantry/{id:int}", async (int id, AppDbContext db, HttpContext http) =>
 {
+    var user = await GetCurrentUserAsync(db, http);
+
+    if (user == null)
+        return Results.Unauthorized();
+
     if (id <= 0)
     {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Pantry item ID must be valid.");
+        return Results.BadRequest(new
+        {
+            message = "Pantry item ID must be valid."
+        });
     }
 
-    var pantryItem = await db.Pantries.FindAsync(id);
+    var pantryItem = await db.Pantries
+        .FirstOrDefaultAsync(p => p.Id == id && p.UserId == UserIdResolver.GetUserId(user.Username));
 
     if (pantryItem == null)
     {
-        return ApiError(
-            http,
-            StatusCodes.Status404NotFound,
-            "Pantry item not found.");
+        return Results.NotFound(new
+        {
+            message = "Pantry item not found."
+        });
     }
 
     db.Pantries.Remove(pantryItem);
     await db.SaveChangesAsync();
 
-    return Results.Ok(new { message = "Item deleted successfully." });
+    return Results.Ok(new
+    {
+        message = "Pantry item deleted successfully."
+    });
 });
 
 // ---------- Receipt Parser ----------
@@ -1323,7 +1325,12 @@ app.MapPost("/api/detect", async (HttpRequest req, HttpContext http) =>
 
 app.MapPost("/api/pantry/bulk-add", async (List<ParsedItem>? items, AppDbContext db, HttpContext http) =>
 {
-    int userId = 1; // TODO: replace with real authenticated user id later
+    var user = await GetCurrentUserAsync(db, http);
+
+    if (user == null)
+        return Results.Unauthorized();
+
+    int userId = UserIdResolver.GetUserId(user.Username);
 
     if (items == null || items.Count == 0)
     {
@@ -1602,7 +1609,7 @@ static bool IsExistingTableConflict(Exception ex)
 
 record ChatRequest(string Message);
 record SavePreferencesRequest(int UserId, string Goal, string DietType, string Allergies);
-record PantryRequest(int UserId, string IngredientName, string Category, int Quantity, string Unit, DateTime ExpiryDate);
+record PantryRequest(string IngredientName, string Category, int Quantity, string Unit, DateTime ExpiryDate);
 record ParsedItem(string Name, string? Quantity, string? Unit, string? Category);
 record MealCheckRequest(int RecipeId);
 record DetectedObject(string Label, double Confidence, int YMin, int XMin, int YMax, int XMax, string? Unit, string? Category);
