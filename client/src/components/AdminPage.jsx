@@ -75,6 +75,7 @@ const EMPTY_CATEGORY_FORM = { name: "", emoji: "🍽️", colorKey: "amber", sor
 const EMPTY_RECIPE_FORM = {
   title: "",
   category: "",
+  categoryIds: [],
   ingredients: "",
   steps: "",
   ownerName: "AI-Generated",
@@ -130,6 +131,7 @@ function AdminPage({ token, username, onLogout }) {
   const [savingRecipe, setSavingRecipe] = useState(false);
   const [recipeSearch, setRecipeSearch] = useState("");
   const [recipeFilter, setRecipeFilter] = useState("all");
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const authHeaders = useCallback(
     () => ({ Authorization: `Bearer ${token}` }),
@@ -365,6 +367,7 @@ function AdminPage({ token, username, onLogout }) {
     setRecipeForm({
       title: r.title || "",
       category: r.category || "",
+      categoryIds: r.categories?.map((c) => c.id) || [],
       ingredients: r.ingredients || "",
       steps: r.steps || "",
       ownerName: r.ownerName || "AI-Generated",
@@ -382,12 +385,66 @@ function AdminPage({ token, username, onLogout }) {
     setRecipeForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const toggleRecipeCategoryId = (id) => {
+    setRecipeForm((prev) => {
+      const has = prev.categoryIds.includes(id);
+
+      return {
+        ...prev,
+        categoryIds: has
+          ? prev.categoryIds.filter((cid) => cid !== id)
+          : [...prev.categoryIds, id],
+      };
+    });
+  };
+
+  const handleRecipeImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const res = await fetch(`${API}/api/recipe/upload-image`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: formData,
+      });
+
+      const data = await readAdminResponse(res, "Failed to upload image.");
+      setRecipeForm((prev) => ({ ...prev, imageUrl: `${API}${data.url}` }));
+    } catch (err) {
+      setError(formatFetchError(err));
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const saveRecipe = async (e) => {
     e.preventDefault();
     if (!recipeForm.title.trim()) return setError("Recipe title is required.");
-    if (!recipeForm.category.trim()) return setError("Category is required.");
+    if (!recipeForm.categoryIds || recipeForm.categoryIds.length === 0) return setError("Select at least one category.");
     if (!recipeForm.ingredients.trim()) return setError("Ingredients are required.");
     if (!recipeForm.steps.trim()) return setError("Cooking instructions are required.");
+
+    // Validate imageUrl if provided
+    if (recipeForm.imageUrl && 
+        !recipeForm.imageUrl.startsWith("http://") && 
+        !recipeForm.imageUrl.startsWith("https://") && 
+        !recipeForm.imageUrl.startsWith("/")) {
+      return setError("Image URL must be a valid URL or app upload path.");
+    }
+
+    // Set the primary category from the first selected category
+    const primaryCategory = categories.find(c => c.id === recipeForm.categoryIds[0])?.name || "";
+    
+    const payload = {
+      ...recipeForm,
+      category: primaryCategory,
+      categoryIds: recipeForm.categoryIds,
+    };
 
     setSavingRecipe(true);
     const isNew = editRecipeId === "new";
@@ -399,7 +456,7 @@ function AdminPage({ token, username, onLogout }) {
         {
           method: isNew ? "POST" : "PUT",
           headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify(recipeForm),
+          body: JSON.stringify(payload),
         }
       ),
       () => {
@@ -744,33 +801,40 @@ function AdminPage({ token, username, onLogout }) {
               {filteredCategories.length === 0 ? (
                 <p className="text-sm text-slate-400 p-5">No categories match your filters.</p>
               ) : (
-                filteredCategories.map((c) => (
-                  <div key={c.id} className="flex items-center gap-4 p-4">
-                    <div
-                      className={`w-12 h-12 shrink-0 rounded-full bg-gradient-to-br ${getCategoryGradient(c.colorKey)} flex items-center justify-center text-lg border-2 border-brand/20`}
-                    >
-                      {c.emoji}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900">{c.name}</p>
-                      <p className="text-xs text-slate-400">order {c.sortOrder}</p>
-                    </div>
-                    <div className="flex gap-3 shrink-0">
-                      <button
-                        onClick={() => startEditCategory(c)}
-                        className="text-green-600 text-sm font-medium hover:text-green-700 hover:underline"
+                filteredCategories.map((c) => {
+                  const recipeCount = recipes.filter(r => 
+                    r.category === c.name || 
+                    (r.categories && r.categories.some(cat => cat.name === c.name))
+                  ).length;
+                  
+                  return (
+                    <div key={c.id} className="flex items-center gap-4 p-4">
+                      <div
+                        className={`w-12 h-12 shrink-0 rounded-full bg-gradient-to-br ${getCategoryGradient(c.colorKey)} flex items-center justify-center text-lg border-2 border-brand/20`}
                       >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deleteCategory(c)}
-                        className="text-red-500 text-sm font-medium hover:underline"
-                      >
-                        Remove
-                      </button>
+                        {c.emoji}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-900">{c.name}</p>
+                        <p className="text-xs text-slate-400">{recipeCount} recipe{recipeCount !== 1 ? 's' : ''}</p>
+                      </div>
+                      <div className="flex gap-3 shrink-0">
+                        <button
+                          onClick={() => startEditCategory(c)}
+                          className="text-green-600 text-sm font-medium hover:text-green-700 hover:underline"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => deleteCategory(c)}
+                          className="text-red-500 text-sm font-medium hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
@@ -817,17 +881,6 @@ function AdminPage({ token, username, onLogout }) {
                           <option key={opt.key} value={opt.key}>{opt.label}</option>
                         ))}
                       </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Order</label>
-                      <input
-                        type="number"
-                        name="sortOrder"
-                        value={categoryForm.sortOrder}
-                        onChange={handleCategoryInput}
-                        className={inputClass}
-                      />
-                      <p className="text-xs text-slate-400 mt-1">Lower numbers appear first.</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4 pt-2">
@@ -900,8 +953,12 @@ function AdminPage({ token, username, onLogout }) {
               ) : (
                 filteredRecipes.map((r) => (
                   <div key={r.id} className="flex items-start gap-4 p-4">
-                    <div className="w-12 h-12 shrink-0 rounded-xl bg-gradient-to-br from-orange-100 to-amber-200 flex items-center justify-center text-xl">
-                      🍽️
+                    <div className="w-12 h-12 shrink-0 rounded-xl overflow-hidden bg-gradient-to-br from-orange-100 to-amber-200 flex items-center justify-center">
+                      {r.imageUrl ? (
+                        <img src={r.imageUrl} alt={r.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xl">🍽️</span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-900">{r.title}</p>
@@ -948,24 +1005,6 @@ function AdminPage({ token, username, onLogout }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Category *</label>
-                      <input
-                        type="text"
-                        name="category"
-                        value={recipeForm.category}
-                        onChange={handleRecipeInput}
-                        className={inputClass}
-                        placeholder="e.g., Salad"
-                        list="admin-recipe-categories"
-                        required
-                      />
-                      <datalist id="admin-recipe-categories">
-                        {categories.map((c) => (
-                          <option key={c.id} value={c.name} />
-                        ))}
-                      </datalist>
-                    </div>
-                    <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Owner</label>
                       <input
                         type="text"
@@ -986,6 +1025,56 @@ function AdminPage({ token, username, onLogout }) {
                         className={inputClass}
                         placeholder="Optional"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Upload Image</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleRecipeImageUpload}
+                        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-brand-light file:text-brand hover:file:bg-brand/10"
+                      />
+                      {recipeForm.imageUrl && (
+                        <div className="mt-2">
+                          <img
+                            src={recipeForm.imageUrl}
+                            alt="Recipe preview"
+                            className="w-32 h-32 object-cover rounded-lg border border-slate-200"
+                            onError={(e) => e.target.style.display = 'none'}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                        Categories * <span className="font-normal text-slate-400">(select one or more)</span>
+                      </label>
+                      {categories.length === 0 ? (
+                        <p className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-xl p-3">
+                          Recipe categories could not be loaded. Please refresh the page before creating a recipe.
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {categories.map((cat) => {
+                            const selected = recipeForm.categoryIds.includes(cat.id);
+
+                            return (
+                              <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => toggleRecipeCategoryId(cat.id)}
+                                aria-pressed={selected}
+                                className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-colors ${selected
+                                  ? "bg-brand text-white border-brand"
+                                  : "bg-white text-slate-700 border-slate-200 hover:border-brand/50"
+                                }`}
+                              >
+                                {cat.emoji} {cat.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Ingredients *</label>

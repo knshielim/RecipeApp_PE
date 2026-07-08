@@ -104,6 +104,11 @@ function RecipeDetail({ username, isAdmin = false }) {
   const canManage = canManageRecipe(recipe, username, isAdmin, displayName);
   const dietLabel = formatDietRestriction(recipe.dietRestriction);
 
+  const allergens = recipe.allergens
+    ?.split(",")
+    .map((a) => a.trim())
+    .filter(Boolean) ?? [];
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <button
@@ -201,6 +206,23 @@ function RecipeDetail({ username, isAdmin = false }) {
           )}
         </div>
       </div>
+
+      {/* Allergens */}
+      {allergens.length > 0 && (
+        <div className="soft-card p-6 sm:p-8">
+          <h2 className="section-title mb-4">Allergens</h2>
+          <div className="flex flex-wrap gap-2">
+            {allergens.map((allergen, index) => (
+              <span
+                key={index}
+                className="text-xs bg-amber-50 text-amber-700 px-3 py-1.5 rounded-full font-medium border border-amber-100"
+              >
+                Contains {allergen}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Ingredients */}
       <div className="soft-card p-6 sm:p-8">

@@ -421,8 +421,10 @@ app.MapPost("/api/ai/suggest-meal", async (Kernel kernel, HttpContext http) =>
 
         history.AddSystemMessage(
             $"You are a meal-planning assistant. The current user's id is {userId}. " +
-            $"Use the RecipeData plugin to look at their saved recipes, then suggest " +
-            $"ONE good dinner option from those recipes with a one-sentence reason why.");
+            $"First call get_user_preferences to check their goal, diet type, and allergies. " +
+            $"Then use the RecipeData plugin to look at their saved recipes. " +
+            $"Suggest ONE good dinner option from those recipes that matches their diet type and avoids their allergies. " +
+            $"Include a one-sentence reason why it's a good match for their preferences.");
 
         history.AddUserMessage("Suggest a meal for me.");
 
@@ -452,8 +454,10 @@ app.MapPost("/api/ai/summarize-recipes", async (Kernel kernel, HttpContext http)
 
         history.AddSystemMessage(
             $"You are a recipe assistant. The current user's id is {userId}. " +
-            $"Use the RecipeData plugin to fetch their saved recipes, then write a short, " +
-            $"friendly summary of what kinds of meals they tend to save.");
+            $"First call get_user_preferences to check their goal, diet type, and allergies. " +
+            $"Then use the RecipeData plugin to fetch their saved recipes. " +
+            $"Write a short, friendly summary of what kinds of meals they tend to save, " +
+            $"and mention how their saved recipes align with their dietary preferences.");
 
         history.AddUserMessage("Summarize my saved recipes.");
 
@@ -815,7 +819,7 @@ app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest? req, Kernel
             "\"ingredients\":\"comma, separated, list\",\"instructions\":\"numbered steps as one string\"," +
             "\"dietRestriction\":\"none|vegetarian|vegan|gluten-free|dairy-free|nut-free|low-carb|paleo|low-sodium|sugar-free|whole30|mediterranean|pescatarian|halal\"," +
             "\"allergens\":\"comma, separated, allergens, or, empty, string\"," +
-            "\"imageUrl\":\"\"}");
+            "\"imageUrl\":\"https://source.unsplash.com/featured/?food,cooking\"}");
 
         history.AddUserMessage(string.IsNullOrWhiteSpace(craving)
             ? "Surprise me with a new recipe."
@@ -842,7 +846,11 @@ app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest? req, Kernel
         var reply = $"**{parsed.Title}** ({parsed.Category})\n\n" +
             $"Diet: {parsed.DietRestriction}\n" +
             (string.IsNullOrWhiteSpace(parsed.Allergens) ? "" : $"Allergens: {parsed.Allergens}\n\n") +
-            $"Ingredients: {parsed.Ingredients}\n\nInstructions:\n{parsed.Instructions}";
+            $"Ingredients: {parsed.Ingredients}\n\nInstructions:\n{parsed.Instructions}\n\n" +
+            $"Image: {parsed.ImageUrl}";
+
+        // Set owner as AI-Generated for AI-generated recipes
+        parsed.OwnerName = "AI-Generated";
 
         return Results.Ok(new { reply, recipe = parsed });
     }
@@ -1209,9 +1217,9 @@ app.MapPost("/api/receipt/parse", async (HttpRequest req, HttpContext http) =>
 
     const string prompt =
         "Read this grocery receipt. Extract every grocery item purchased. " +
-        "For each item return its name, a numeric quantity if shown, and a unit of measurement. " +
+        "For each item return its name, a numeric quantity if shown, a unit of measurement, and categorize it into one of: Vegetables, Fruits, Grains, Proteins, Dairy, Spices, Oils, Beverages, Snacks, Other. " +
         "Ignore prices, totals, tax, store name, and dates. " +
-        "Return as a JSON array like: [{\"name\":\"chicken breast\",\"quantity\":\"500\",\"unit\":\"g\"}, ...]";
+        "Return as a JSON array like: [{\"name\":\"chicken breast\",\"quantity\":\"500\",\"unit\":\"g\",\"category\":\"Proteins\"}, ...]";
 
     var message = new ChatMessage(
         ChatRole.User,
@@ -1286,7 +1294,9 @@ app.MapPost("/api/detect", async (HttpRequest req, HttpContext http) =>
         "Detect every prominent food or grocery item in this image. " +
         "For each object return a short label, a confidence between 0 and 1, " +
         "a bounding box as yMin, xMin, yMax, xMax normalised to a 0-1000 scale, " +
-        "and a typical unit of measurement. Also write a one-sentence summary.";
+        "a typical unit of measurement, and categorize it into one of: Vegetables, Fruits, Grains, Proteins, Dairy, Spices, Oils, Beverages, Snacks, Other. " +
+        "Also write a one-sentence summary. " +
+        "Return as JSON: {\"objects\":[{\"label\":\"...\",\"confidence\":0.95,\"yMin\":100,\"xMin\":200,\"yMax\":300,\"xMax\":400,\"unit\":\"pieces\",\"category\":\"Vegetables\"},...],\"summary\":\"...\"}";
 
     var message = new ChatMessage(
         ChatRole.User,
@@ -1323,7 +1333,7 @@ app.MapPost("/api/pantry/bulk-add", async (List<ParsedItem>? items, AppDbContext
             "No items provided.");
     }
 
-    var grouped = new Dictionary<string, (string DisplayName, int Count, string? Unit)>(
+    var grouped = new Dictionary<string, (string DisplayName, int Count, string? Unit, string? Category)>(
         StringComparer.OrdinalIgnoreCase);
 
     foreach (var item in items)
@@ -1338,6 +1348,7 @@ app.MapPost("/api/pantry/bulk-add", async (List<ParsedItem>? items, AppDbContext
 
         int count = 1;
         string? unit = null;
+        string? category = item.Category?.Trim() ?? "Other";
 
         if (!string.IsNullOrWhiteSpace(item.Unit))
         {
@@ -1369,12 +1380,13 @@ app.MapPost("/api/pantry/bulk-add", async (List<ParsedItem>? items, AppDbContext
             grouped[key] = (
                 existingGroup.DisplayName,
                 existingGroup.Count + count,
-                unit ?? existingGroup.Unit
+                unit ?? existingGroup.Unit,
+                category
             );
         }
         else
         {
-            grouped[key] = (name, count, unit);
+            grouped[key] = (name, count, unit, category);
         }
     }
 
@@ -1407,7 +1419,7 @@ app.MapPost("/api/pantry/bulk-add", async (List<ParsedItem>? items, AppDbContext
             {
                 UserId = userId,
                 IngredientName = group.DisplayName,
-                Category = "Uncategorized",
+                Category = group.Category ?? "Other",
                 Quantity = group.Count,
                 Unit = group.Unit ?? "",
                 ExpiryDate = DateTime.Now.AddDays(14) // rough default; adjust per item type if desired
@@ -1591,10 +1603,13 @@ static bool IsExistingTableConflict(Exception ex)
 record ChatRequest(string Message);
 record SavePreferencesRequest(int UserId, string Goal, string DietType, string Allergies);
 record PantryRequest(int UserId, string IngredientName, string Category, int Quantity, string Unit, DateTime ExpiryDate);
-record ParsedItem(string Name, string? Quantity, string? Unit);
+record ParsedItem(string Name, string? Quantity, string? Unit, string? Category);
 record MealCheckRequest(int RecipeId);
-record DetectedObject(string Label, double Confidence, int YMin, int XMin, int YMax, int XMax, string? Unit);
+record DetectedObject(string Label, double Confidence, int YMin, int XMin, int YMax, int XMax, string? Unit, string? Category);
 record DetectionResult(List<DetectedObject> Objects, string Summary);
 record GenerateRecipeRequest(string? Craving);
-record GeneratedRecipe(string Title, string Category, string Ingredients, string Instructions, string DietRestriction, string Allergens, string ImageUrl);
+record GeneratedRecipe(string Title, string Category, string Ingredients, string Instructions, string DietRestriction, string Allergens, string ImageUrl)
+{
+    public string OwnerName { get; set; } = "AI-Generated";
+}
 

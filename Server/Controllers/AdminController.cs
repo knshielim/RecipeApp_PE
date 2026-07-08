@@ -161,20 +161,31 @@ public class AdminController : ControllerBase
     {
         var recipes = await _db.Recipes
             .OrderByDescending(r => r.Id)
-            .Select(r => new
-            {
-                r.Id,
-                r.UserId,
-                r.Title,
-                r.Ingredients,
-                r.Steps,
-                r.Category,
-                r.ImageUrl,
-                r.OwnerName
-            })
             .ToListAsync();
 
-        return Ok(recipes);
+        var recipeIds = recipes.Select(r => r.Id).ToList();
+        var categoryAssignments = await _db.RecipeCategoryAssignments
+            .Where(rca => recipeIds.Contains(rca.RecipeId))
+            .Include(rca => rca.RecipeCategory)
+            .ToListAsync();
+
+        var result = recipes.Select(r => new
+        {
+            r.Id,
+            r.UserId,
+            r.Title,
+            r.Ingredients,
+            r.Steps,
+            r.Category,
+            r.ImageUrl,
+            r.OwnerName,
+            Categories = categoryAssignments
+                .Where(ca => ca.RecipeId == r.Id)
+                .Select(ca => new { ca.RecipeCategory.Id, ca.RecipeCategory.Name, ca.RecipeCategory.Emoji, ca.RecipeCategory.ColorKey })
+                .ToList()
+        });
+
+        return Ok(result);
     }
 
     // POST api/admin/recipes

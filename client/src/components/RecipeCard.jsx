@@ -48,6 +48,18 @@ export default function RecipeCard({ recipe, favoriteButton, detailPath }) {
               <span className="font-bold text-slate-700">{categoryLabel}</span>
             </p>
           )}
+          {recipe.categories && recipe.categories.length > 1 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {recipe.categories.slice(1).map((cat) => (
+                <span
+                  key={cat.id}
+                  className="text-xs bg-brand-light text-brand px-2 py-0.5 rounded-full font-medium"
+                >
+                  {cat.emoji} {cat.name}
+                </span>
+              ))}
+            </div>
+          )}
           {dietLabel && (
             <p>
               <span className="font-bold text-slate-800">Diet:</span>{" "}
@@ -61,19 +73,6 @@ export default function RecipeCard({ recipe, favoriteButton, detailPath }) {
             </p>
           )}
         </div>
-
-        {allergens.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {allergens.map((allergen, index) => (
-              <span
-                key={index}
-                className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-medium"
-              >
-                Contains {allergen}
-              </span>
-            ))}
-          </div>
-        )}
 
         {detailPath && (
           <Link
