@@ -5,6 +5,7 @@ import {
   Route,
   Navigate,
   useNavigate,
+  useLocation,
   Outlet,
 } from "react-router-dom";
 import LoginPage from "./components/LoginPage";
@@ -46,10 +47,13 @@ function setStoredAuth(auth) {
 
 function LoginWrapper({ onLoginSuccess }) {
   const navigate = useNavigate();
+  const location = useLocation();
   return (
     <LoginPage
       onLoginSuccess={onLoginSuccess}
       onGoToRegister={() => navigate("/register")}
+      initialUsername={location.state?.username || ""}
+      justRegistered={Boolean(location.state?.justRegistered)}
     />
   );
 }
@@ -58,7 +62,14 @@ function RegisterWrapper() {
   const navigate = useNavigate();
   return (
     <RegistrationPage
-      onGoToLogin={() => navigate("/login")}
+      onGoToLogin={(username) =>
+        navigate(
+          "/login",
+          typeof username === "string" && username
+            ? { state: { username, justRegistered: true } }
+            : undefined
+        )
+      }
     />
   );
 }

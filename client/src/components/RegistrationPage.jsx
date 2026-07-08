@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { API_BASE, parseApiResponse, formatFetchError } from "../utils/apiError";
 
 const API = API_BASE;
@@ -13,13 +13,18 @@ function RegistrationPage({ onGoToLogin }) {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [registeredUsername, setRegisteredUsername] = useState(null);
+
+  useEffect(() => {
+    if (registeredUsername === null) return;
+    const timer = setTimeout(() => onGoToLogin(registeredUsername), 2500);
+    return () => clearTimeout(timer);
+  }, [registeredUsername, onGoToLogin]);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    setSuccess("");
 
     if (password !== confirm) {
       setError("Passwords do not match.");
@@ -44,17 +49,9 @@ function RegistrationPage({ onGoToLogin }) {
         }),
       });
 
-      const data = await parseApiResponse(res, "Registration failed.");
+      await parseApiResponse(res, "Registration failed.");
 
-      setSuccess(data.message || "Account created successfully.");
-      setFullName("");
-      setEmail("");
-      setUsername("");
-      setPassword("");
-      setConfirm("");
-      setPhoneNumber("");
-      setDateOfBirth("");
-      setGender("");
+      setRegisteredUsername(username.trim());
     } catch (err) {
       setError(formatFetchError(err));
     } finally {
@@ -63,6 +60,35 @@ function RegistrationPage({ onGoToLogin }) {
   }
 
   const inputClass = "input-field w-full";
+
+  if (registeredUsername !== null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-surface">
+        <div className="w-full max-w-md soft-card soft-shadow p-8 sm:p-10 text-center">
+          <span className="mx-auto grid place-items-center w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 mb-6">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-8 h-8">
+              <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <h2 className="font-bold text-2xl text-slate-900">Account created!</h2>
+          <p className="text-sm text-slate-500 mt-2">
+            Welcome, <span className="font-semibold text-slate-700">{registeredUsername}</span>.
+            <br />
+            Taking you to the sign-in page...
+          </p>
+          <div className="flex justify-center mt-6 mb-2">
+            <span className="w-5 h-5 rounded-full border-2 border-slate-200 border-t-brand animate-spin" />
+          </div>
+          <button
+            onClick={() => onGoToLogin(registeredUsername)}
+            className="w-full btn-primary py-3 mt-4"
+          >
+            Sign in now
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-surface">
@@ -211,12 +237,6 @@ function RegistrationPage({ onGoToLogin }) {
             </p>
           )}
 
-          {success && (
-            <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3.5 py-2.5">
-              {success}
-            </p>
-          )}
-
           {/* Mengubah tombol pendaftaran menggunakan tema warna Nomly */}
           <button
             type="submit"
@@ -230,7 +250,7 @@ function RegistrationPage({ onGoToLogin }) {
         <p className="text-sm text-center text-slate-500 mt-6">
           Already registered?{" "}
           <button
-            onClick={onGoToLogin}
+            onClick={() => onGoToLogin()}
             className="text-brand font-semibold hover:underline"
           >
             Sign in

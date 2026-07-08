@@ -27,8 +27,8 @@ const ROLES = [
   },
 ];
 
-function LoginPage({ onLoginSuccess, onGoToRegister }) {
-  const [username, setUsername] = useState("");
+function LoginPage({ onLoginSuccess, onGoToRegister, initialUsername = "", justRegistered = false }) {
+  const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("User");
   const [error, setError] = useState("");
@@ -87,6 +87,12 @@ function LoginPage({ onLoginSuccess, onGoToRegister }) {
           <p className="text-sm text-slate-500 mt-1 mb-6">
             Choose your role, then enter your credentials.
           </p>
+
+          {justRegistered && !error && (
+            <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3.5 py-2.5 mb-6">
+              Account created successfully. Sign in with your new credentials.
+            </p>
+          )}
 
           {/* Role selector */}
           <div className="grid grid-cols-2 gap-3 mb-6" role="radiogroup" aria-label="Role">
