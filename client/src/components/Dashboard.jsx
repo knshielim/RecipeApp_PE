@@ -64,6 +64,7 @@ export default function Dashboard({ username }) {
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState(null);
   const [favoriteIds, setFavoriteIds] = useState(new Set());
+  const [favoriteRecipes, setFavoriteRecipes] = useState([]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -102,8 +103,10 @@ export default function Dashboard({ username }) {
     try {
       const favorites = await getFavoriteRecipes(username);
       setFavoriteIds(new Set(favorites.map((f) => f.id)));
+      setFavoriteRecipes(favorites);
     } catch {
       setFavoriteIds(new Set());
+      setFavoriteRecipes([]);
     }
   }
 
@@ -210,7 +213,7 @@ export default function Dashboard({ username }) {
   const categoryChartData = useMemo(() => {
     const counts = {};
 
-    recentRecipes.forEach((r) => {
+    favoriteRecipes.forEach((r) => {
       const names = getRecipeCategoryNames(r);
 
       if (names.length === 0) {
@@ -227,7 +230,7 @@ export default function Dashboard({ username }) {
       .map(([category, count]) => ({ category, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 6);
-  }, [recentRecipes]);
+  }, [favoriteRecipes]);
 
   if (loading) {
     return (
@@ -238,7 +241,8 @@ export default function Dashboard({ username }) {
   }
 
   return (
-    <div className="flex gap-6 lg:gap-8">
+    <div className="space-y-8">
+      <div className="flex gap-6 lg:gap-8">
       {/* Main column */}
       <div className="flex-1 min-w-0 space-y-8">
         {!isSearching && (
@@ -298,10 +302,10 @@ export default function Dashboard({ username }) {
           </>
         )}
 
-        {/* Popular Recipes */}
+        {/* Recent Recipes */}
         <section>
           <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
-            <h2 className="section-title">{isSearching ? 'Search Results' : 'Popular Recipe'}</h2>
+            <h2 className="section-title">{isSearching ? 'Search Results' : 'Recent Recipes'}</h2>
             {isSearching && (
               <p className="text-sm text-slate-500">
                 {filteredRecipes.length} result{filteredRecipes.length !== 1 ? 's' : ''} for &ldquo;{searchQuery.trim()}&rdquo;
@@ -362,34 +366,13 @@ export default function Dashboard({ username }) {
             </div>
           )}
         </section>
-
-        {!isSearching && (
-          /* What you can do */
-          <section>
-            <h2 className="section-title mb-1">What can you do on our website?</h2>
-            <p className="text-sm text-slate-500 mb-4">Here&apos;s a quick guide to everything Nomly offers.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {SITE_FEATURES.map((feature) => (
-                <div key={feature.title} className="soft-card p-5">
-                  {feature.icon.startsWith('/') ? (
-                    <img src={feature.icon} alt={feature.title} className="w-10 h-10" />
-                  ) : (
-                    <span className="text-2xl">{feature.icon}</span>
-                  )}
-                  <h3 className="font-bold text-slate-800 mt-3">{feature.title}</h3>
-                  <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{feature.desc}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
       </div>
 
       {/* Events sidebar */}
       {!isSearching && (
         <aside className="hidden xl:block w-72 shrink-0">
           <h2 className="section-title mb-4 leading-snug">
-            Events you may be interested
+            Meals you may be interested
           </h2>
 
           {eventCards.length > 0 ? (
@@ -438,6 +421,28 @@ export default function Dashboard({ username }) {
             </Link>
           </div>
         </aside>
+      )}
+      </div>
+
+      {/* Full-width features section */}
+      {!isSearching && (
+        <section className="w-full">
+          <h2 className="section-title mb-1">What can you do on our website?</h2>
+          <p className="text-sm text-slate-500 mb-4">Here&apos;s a quick guide to everything Nomly offers.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {SITE_FEATURES.map((feature) => (
+              <div key={feature.title} className="soft-card p-5">
+                {feature.icon.startsWith('/') ? (
+                  <img src={feature.icon} alt={feature.title} className="w-10 h-10" />
+                ) : (
+                  <span className="text-2xl">{feature.icon}</span>
+                )}
+                <h3 className="font-bold text-slate-800 mt-3">{feature.title}</h3>
+                <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{feature.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );
