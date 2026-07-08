@@ -109,20 +109,31 @@ public class RecipeController : ControllerBase
             return categoryError;
         }
 
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var recipe = new Recipe
         {
             UserId = dto.UserId,
-            OwnerName = dto.OwnerName.Trim(),
+            OwnerName = string.IsNullOrWhiteSpace(dto.OwnerName)
+                ? "User"
+                : dto.OwnerName.Trim(),
+
             DietRestriction = string.IsNullOrWhiteSpace(dto.DietRestriction)
                 ? "none"
                 : dto.DietRestriction.Trim(),
+
             Allergens = string.IsNullOrWhiteSpace(dto.Allergens)
                 ? ""
                 : dto.Allergens.Trim(),
+
             Title = dto.Title.Trim(),
             Ingredients = dto.Ingredients.Trim(),
             Steps = dto.Steps.Trim(),
-            Category = dto.Category.Trim(),
+
+            Category = string.IsNullOrWhiteSpace(dto.Category)
+                ? "Uncategorized"
+                : dto.Category.Trim(),
+
             ImageUrl = string.IsNullOrWhiteSpace(dto.ImageUrl)
                 ? ""
                 : dto.ImageUrl.Trim()
@@ -132,6 +143,8 @@ public class RecipeController : ControllerBase
         await _context.SaveChangesAsync();
 
         await SyncCategoryAssignmentsAsync(recipe.Id, dto.CategoryIds, recipe.Category);
+
+        await transaction.CommitAsync();
 
         var categoryAssignments = await _context.RecipeCategoryAssignments
             .Where(rca => rca.RecipeId == recipe.Id)

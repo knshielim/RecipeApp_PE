@@ -78,7 +78,7 @@ builder.Services.AddControllers()
         };
     });
 builder.Services.AddSingleton<TokenService>();
-
+builder.Services.AddScoped<RecipeService>();
 // UserStore needs to be scoped to access DbContext
 builder.Services.AddScoped<UserStore>();
 builder.Services.AddScoped<IMealPlanSuggester, MealPlanSuggester>();
@@ -855,97 +855,10 @@ app.MapPost("/api/ai/generate-recipe", async (GenerateRecipeRequest? req, Kernel
 
 // ---------- Save a generated (or manually written) recipe ----------
 
-app.MapPost("/api/recipe", async (SaveRecipeRequest? req, AppDbContext db, HttpContext http) =>
-{
-    if (req == null)
-    {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Recipe data is required.");
-    }
-
-    if (string.IsNullOrWhiteSpace(req.Title))
-    {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Recipe title is required.");
-    }
-
-    if (string.IsNullOrWhiteSpace(req.Ingredients))
-    {
-        return ApiError(
-            http,
-            StatusCodes.Status400BadRequest,
-            "Ingredients are required.");
-    }
-
-    int userId = 1;
-
-    var recipe = new Recipe
-    {
-        UserId = userId,
-        Title = req.Title.Trim(),
-        Ingredients = req.Ingredients.Trim(),
-        Steps = string.IsNullOrWhiteSpace(req.Steps) ? "" : req.Steps.Trim(),
-        Category = string.IsNullOrWhiteSpace(req.Category) ? "Uncategorized" : req.Category.Trim(),
-        ImageUrl = string.IsNullOrWhiteSpace(req.ImageUrl) ? "" : req.ImageUrl.Trim(),
-        OwnerName = string.IsNullOrWhiteSpace(req.OwnerName) ? "AI-Generated" : req.OwnerName.Trim(),
-        DietRestriction = string.IsNullOrWhiteSpace(req.DietRestriction) ? "none" : req.DietRestriction.Trim(),
-        Allergens = string.IsNullOrWhiteSpace(req.Allergens) ? "" : req.Allergens.Trim()
-    };
-
-    db.Recipes.Add(recipe);
-    await db.SaveChangesAsync();
-
-    if (req.CategoryIds != null && req.CategoryIds.Length > 0)
-    {
-        foreach (var categoryId in req.CategoryIds)
-        {
-            var categoryExists = await db.RecipeCategories.AnyAsync(c => c.Id == categoryId);
-
-            if (categoryExists)
-            {
-                db.RecipeCategoryAssignments.Add(new RecipeCategoryAssignment
-                {
-                    RecipeId = recipe.Id,
-                    RecipeCategoryId = categoryId
-                });
-            }
-        }
-
-        await db.SaveChangesAsync();
-    }
-    else if (!string.IsNullOrWhiteSpace(recipe.Category))
-    {
-        var categoryId = await db.RecipeCategories
-            .Where(c => c.Name == recipe.Category)
-            .Select(c => (int?)c.Id)
-            .FirstOrDefaultAsync();
-
-        if (categoryId.HasValue)
-        {
-            db.RecipeCategoryAssignments.Add(new RecipeCategoryAssignment
-            {
-                RecipeId = recipe.Id,
-                RecipeCategoryId = categoryId.Value
-            });
-
-            await db.SaveChangesAsync();
-        }
-    }
-
-    return Results.Ok(new
-    {
-        recipe.Id,
-        recipe.Title,
-        recipe.Category,
-        recipe.ImageUrl
-    });
-});
+// deleted
 
 // ---------- Dashboard Endpoints ----------
+
 
 app.MapGet("/api/dashboard/stats/{userId:int}", async (int userId, AppDbContext db, HttpContext http) =>
 {
@@ -1685,4 +1598,4 @@ record DetectedObject(string Label, double Confidence, int YMin, int XMin, int Y
 record DetectionResult(List<DetectedObject> Objects, string Summary);
 record GenerateRecipeRequest(string? Craving);
 record GeneratedRecipe(string Title, string Category, string Ingredients, string Instructions, string DietRestriction, string Allergens, string ImageUrl);
-record SaveRecipeRequest(string Title, string Ingredients, string? Steps, string? Category, string? ImageUrl, string? OwnerName, string? DietRestriction, string? Allergens, int[]? CategoryIds);
+
