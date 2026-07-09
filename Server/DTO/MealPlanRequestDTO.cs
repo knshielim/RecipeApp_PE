@@ -4,9 +4,6 @@ namespace Server.DTO;
 
 public class MealPlanRequestDTO
 {
-    [Range(1, int.MaxValue, ErrorMessage = "User ID must be valid.")]
-    public int UserId { get; set; }
-
     [RegularExpression(
         @"^\d{4}-\d{2}-\d{2}$|^$",
         ErrorMessage = "Week start date must use the format yyyy-MM-dd."

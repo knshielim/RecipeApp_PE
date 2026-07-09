@@ -12,8 +12,6 @@ import { matchesSearch, isSearchActive } from "../utils/search";
 import { formatWeekLabel } from "../utils/weekUtils";
 import { formatFetchError } from "../utils/apiError";
 
-const USER_ID = 1;
-
 function formatQuantity(qty) {
   if (Number.isInteger(qty) || qty % 1 === 0) return String(Math.round(qty));
   return qty.toFixed(2).replace(/0$/, "").replace(/\.0$/, "");
@@ -28,7 +26,7 @@ function formatAmount(item) {
 
 const EMPTY_NEW_ITEM = { name: "", quantity: "", unit: "" };
 
-export default function GroceryList({ weekStart, onSearchResultsChange }) {
+export default function GroceryList({ token, weekStart, onSearchResultsChange }) {
   const { searchQuery } = useSearch();
   const [items, setItems] = useState(null);
   const [totalRecipes, setTotalRecipes] = useState(0);
@@ -59,7 +57,7 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
     setInitialLoading(true);
     setError("");
 
-    getGroceryList(USER_ID, weekStart)
+    getGroceryList(token, weekStart)
       .then((data) => {
         if (!cancelled) applyResponse(data);
       })
@@ -73,14 +71,14 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
     return () => {
       cancelled = true;
     };
-  }, [weekStart, applyResponse]);
+  }, [token, weekStart, applyResponse]);
 
   async function generateList() {
     setLoading(true);
     setError("");
 
     try {
-      const data = await generateGroceryList(USER_ID, weekStart);
+      const data = await generateGroceryList(token, weekStart);
       applyResponse(data);
     } catch (err) {
       setError(formatFetchError(err) || "Failed to generate grocery list.");
@@ -96,7 +94,7 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, isChecked: nextChecked } : i)));
 
     try {
-      await updateGroceryItem(USER_ID, item.id, { isChecked: nextChecked });
+      await updateGroceryItem(token, item.id, { isChecked: nextChecked });
     } catch (err) {
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, isChecked: item.isChecked } : i)));
       setError(formatFetchError(err) || "Failed to save item.");
@@ -113,7 +111,7 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
     setError("");
 
     try {
-      const created = await addGroceryItem(USER_ID, weekStart, {
+      const created = await addGroceryItem(token, weekStart, {
         name,
         quantity: Number(newItem.quantity) || 0,
         unit: newItem.unit.trim(),
@@ -136,7 +134,7 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
     setItems((prev) => prev.filter((i) => i.id !== item.id));
 
     try {
-      await deleteGroceryItem(USER_ID, item.id);
+      await deleteGroceryItem(token, item.id);
     } catch (err) {
       setItems((prev) =>
         [...prev, item].sort((a, b) =>
@@ -164,7 +162,7 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
     setEditItemId(null);
 
     try {
-      const updated = await updateGroceryItem(USER_ID, item.id, changes);
+      const updated = await updateGroceryItem(token, item.id, changes);
       setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
     } catch (err) {
       setError(formatFetchError(err) || "Failed to update item.");
@@ -175,7 +173,7 @@ export default function GroceryList({ weekStart, onSearchResultsChange }) {
     setItems((prev) => prev.map((i) => ({ ...i, isChecked: false })));
 
     try {
-      await uncheckAllGroceryItems(USER_ID, weekStart);
+      await uncheckAllGroceryItems(token, weekStart);
     } catch (err) {
       setError(formatFetchError(err) || "Failed to reset checked items.");
     }
